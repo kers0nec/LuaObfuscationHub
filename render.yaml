@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: lua-obfuscation-hub
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: CLIENT_ID
+        sync: false
+      - key: CLIENT_SECRET
+        sync: false
+      - key: GUILD_ID
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: NODE_VERSION
+        value: 18.17.0
+    healthCheckPath: /health
+    autoDeploy: true
