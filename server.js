@@ -48,10 +48,12 @@ const DEFAULT_MAX_PANELS = Number(process.env.DEFAULT_MAX_PANELS || 50);
 const OBF_API_URL = process.env.OBF_API_URL || 'https://kers0ne-0bf.lovable.app/api/public/obfuscate';
 const OBF_API_KEY = process.env.OBF_API_KEY || 'kers0neontop123';
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
+const PUBLIC_DIR = path.join(__dirname, 'public');
 
 console.log('LuaObfuscationHub starting');
 console.log('Domain:', PUBLIC_BASE_URL);
 console.log('Owner ID:', OWNER_ID);
+console.log('Obfuscation API:', OBF_API_URL);
 
 function ensureUploadsDir() {
   if (!fs.existsSync(UPLOADS_DIR)) {
@@ -202,6 +204,18 @@ function safeSerialize(value) {
     .replace(/&/g, '\\u0026');
 }
 
+function readOptionalFile(filePath, fallback = '') {
+  try {
+    return fs.readFileSync(filePath, 'utf8');
+  } catch {
+    return fallback;
+  }
+}
+
+const INLINE_APP_CSS = readOptionalFile(path.join(PUBLIC_DIR, 'app.css'));
+const INLINE_LOGIN_JS = readOptionalFile(path.join(PUBLIC_DIR, 'login.js'));
+const INLINE_DASHBOARD_JS = readOptionalFile(path.join(PUBLIC_DIR, 'dashboard.js'));
+
 function isExpired(isoString) {
   return Boolean(isoString) && new Date(isoString).getTime() < Date.now();
 }
@@ -341,74 +355,7 @@ const app = express();
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
-
-// ============ HOME ROUTE ============
-app.get('/', (req, res) => {
-  // If user is logged in, redirect to dashboard
-  if (req.session && req.session.user) {
-    return res.redirect('/dashboard');
-  }
-  
-  // Otherwise show a simple homepage or login page
-  res.send(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>LuaObfuscationHub</title>
-      <style>
-        body { background: #0a0a0f; color: #e2e8f0; font-family: 'Inter', -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; flex-direction: column; }
-        .container { text-align: center; max-width: 500px; padding: 40px; }
-        h1 { color: #22c3ff; font-size: 3.5rem; margin-bottom: 0.5rem; letter-spacing: -0.02em; }
-        .subtitle { color: #94a3b8; font-size: 1.1rem; margin-bottom: 2rem; }
-        .btn { background: linear-gradient(135deg, #22c3ff, #0891b2); color: #0a0a0f; padding: 14px 32px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 1rem; display: inline-block; transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0 4px 20px rgba(34, 195, 255, 0.25); }
-        .btn:hover { transform: translateY(-2px); box-shadow: 0 6px 30px rgba(34, 195, 255, 0.35); }
-        .btn-secondary { background: rgba(34, 195, 255, 0.08); color: #22c3ff; border: 1px solid rgba(34, 195, 255, 0.15); box-shadow: none; margin-left: 12px; }
-        .btn-secondary:hover { background: rgba(34, 195, 255, 0.14); box-shadow: none; }
-        .links { margin-top: 2rem; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
-        .status { margin-top: 1.5rem; font-size: 0.8rem; color: #475569; }
-        .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #22c3ff; animation: pulse 2s infinite; margin-right: 6px; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-        .features { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 2rem; text-align: left; }
-        .feature { background: rgba(18, 18, 24, 0.5); border: 1px solid rgba(34, 195, 255, 0.06); border-radius: 8px; padding: 12px 16px; }
-        .feature .icon { font-size: 1.2rem; margin-right: 6px; }
-        .feature .label { color: #94a3b8; font-size: 0.8rem; }
-        @media (max-width: 600px) { h1 { font-size: 2.5rem; } .features { grid-template-columns: 1fr; } }
-      </style>
-      <link rel="preconnect" href="https://fonts.googleapis.com">
-      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
-    </head>
-    <body>
-      <div class="container">
-        <h1>🔷 LuaObfuscationHub</h1>
-        <p class="subtitle">Cyberpunk Lua protection system</p>
-        
-        <div class="links">
-          <a href="/auth/discord" class="btn">Login with Discord</a>
-          <a href="/api/login" class="btn btn-secondary">API Key Login</a>
-        </div>
-        
-        <div class="features">
-          <div class="feature"><span class="icon">📜</span> <span class="label">Script Protection</span></div>
-          <div class="feature"><span class="icon">🔑</span> <span class="label">License Keys</span></div>
-          <div class="feature"><span class="icon">📋</span> <span class="label">Discord Panels</span></div>
-          <div class="feature"><span class="icon">🚫</span> <span class="label">HWID Bans</span></div>
-        </div>
-        
-        <div class="status">
-          <span class="status-dot"></span> System online
-        </div>
-      </div>
-    </body>
-    </html>
-  `);
-});
-
-// ============ HEALTH CHECK ============
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), uptime: process.uptime() });
-});
+app.use(express.static(PUBLIC_DIR));
 
 class SQLiteSessionStore extends session.Store {
   constructor(database) {
@@ -1032,236 +979,359 @@ app.get('/loader/:scriptId', (req, res) => {
   ].join('\n'));
 });
 
-// ============ DASHBOARD ROUTE ============
-app.get('/dashboard', requireAuth, (req, res) => {
-  const user = req.session.user;
-  
-  res.send(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>LuaObfuscationHub - Dashboard</title>
-      <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Inter', -apple-system, sans-serif; background: #0a0a0f; color: #e2e8f0; min-height: 100vh; }
-        .container { max-width: 1200px; margin: 0 auto; padding: 40px 20px; }
-        h1 { color: #22c3ff; font-size: 2.5rem; margin-bottom: 0.5rem; }
-        .card { background: rgba(18, 18, 24, 0.85); backdrop-filter: blur(16px); border: 1px solid rgba(34, 195, 255, 0.08); border-radius: 12px; padding: 24px; margin-bottom: 20px; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
-        .stat { background: rgba(18, 18, 24, 0.85); border: 1px solid rgba(34, 195, 255, 0.06); border-radius: 10px; padding: 16px 20px; }
-        .stat-value { font-size: 2rem; font-weight: 800; color: #22c3ff; }
-        .stat-label { font-size: 0.8rem; color: #475569; text-transform: uppercase; letter-spacing: 0.04em; }
-        .btn { background: linear-gradient(135deg, #22c3ff, #0891b2); color: #0a0a0f; padding: 10px 20px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
-        .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 20px rgba(34, 195, 255, 0.25); }
-        .btn-danger { background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.15); }
-        .btn-danger:hover { background: rgba(239, 68, 68, 0.18); }
-        .btn-secondary { background: rgba(34, 195, 255, 0.08); color: #22c3ff; border: 1px solid rgba(34, 195, 255, 0.15); }
-        .btn-secondary:hover { background: rgba(34, 195, 255, 0.14); }
-        .logout { color: #ef4444; text-decoration: none; font-weight: 600; }
-        input, textarea, select { width: 100%; background: rgba(0,0,0,0.4); border: 1px solid rgba(34, 195, 255, 0.12); border-radius: 8px; padding: 10px 14px; color: #e2e8f0; font-size: 14px; margin-bottom: 12px; }
-        input:focus, textarea:focus, select:focus { outline: none; border-color: #22c3ff; }
-        .flex { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
-        .flex-between { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
-        .mt-4 { margin-top: 16px; }
-        .mb-4 { margin-bottom: 16px; }
-        .text-muted { color: #475569; font-size: 0.9rem; }
-        .badge { font-size: 11px; padding: 2px 10px; border-radius: 12px; display: inline-block; }
-        .badge-active { background: rgba(34, 195, 255, 0.12); color: #22c3ff; }
-        .badge-disabled { background: rgba(239, 68, 68, 0.12); color: #ef4444; }
-        .badge-ffa { background: rgba(251, 191, 36, 0.12); color: #fbbf24; }
-        .badge-obfuscated { background: rgba(139, 92, 246, 0.12); color: #8b5cf6; }
-        .loader-box { background: rgba(0,0,0,0.4); border: 1px solid rgba(34, 195, 255, 0.06); border-radius: 6px; padding: 10px 12px; font-family: monospace; font-size: 11px; color: #22c3ff; overflow-x: auto; white-space: pre-wrap; word-break: break-all; cursor: pointer; margin: 8px 0; }
-        .loader-box:hover { border-color: #22c3ff; }
-        .script-card { background: rgba(18, 18, 24, 0.85); border: 1px solid rgba(34, 195, 255, 0.06); border-radius: 10px; padding: 16px 18px; }
-        .script-card:hover { border-color: rgba(34, 195, 255, 0.12); }
-        @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } .container { padding: 20px 16px; } }
-      </style>
-      <link rel="preconnect" href="https://fonts.googleapis.com">
-      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
-    </head>
-    <body>
-      <div class="container">
-        <div class="flex-between mb-4">
+function pageShell({ title, body, appData = null, inlineScript = '' }) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${escapeHtml(title)}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>${INLINE_APP_CSS}</style>
+</head>
+<body>
+  ${body}
+  ${appData ? `<script>window.__APP__ = ${safeSerialize(appData)};</script>` : ''}
+  ${inlineScript ? `<script>${inlineScript}</script>` : ''}
+</body>
+</html>`;
+}
+
+app.get('/', (req, res) => {
+  if (req.session.user) return res.redirect('/dashboard');
+
+  const body = `
+    <div class="site-bg"></div>
+    <main class="auth-layout">
+      <section class="auth-card panel">
+        <div class="brand-block">
+          <div class="brand-mark">L</div>
           <div>
-            <h1>🔷 LuaObfuscationHub</h1>
-            <p class="text-muted">Welcome back, ${escapeHtml(user.username)} ${user.is_owner ? '👑' : ''}</p>
-          </div>
-          <div class="flex">
-            <a href="/logout" class="logout">Logout</a>
+            <p class="eyebrow">LuaObfuscationHub</p>
+            <h1>LuaObfuscationHub</h1>
+            <p class="muted">Cyberpunk-grade Lua protection</p>
           </div>
         </div>
-        
-        <div class="grid mb-4" id="stats">
-          <div class="stat"><div class="stat-label">Scripts</div><div class="stat-value" id="statScripts">0</div></div>
-          <div class="stat"><div class="stat-label">Panels</div><div class="stat-value" id="statPanels">0</div></div>
-          <div class="stat"><div class="stat-label">Keys</div><div class="stat-value" id="statKeys">0</div></div>
-          <div class="stat"><div class="stat-label">HWID Bans</div><div class="stat-value" id="statHwids">0</div></div>
-        </div>
-        
-        <div class="card">
-          <h2>📜 Upload Script</h2>
-          <input id="scriptName" type="text" placeholder="Script name">
-          <textarea id="scriptCode" rows="8" placeholder="-- Paste your Lua code here"></textarea>
-          <div class="flex">
-            <label><input type="checkbox" id="ffaModeCheck"> Open Access (FFA)</label>
-            <label><input type="checkbox" id="compressModeCheck"> Auto-Obfuscate</label>
-            <button class="btn" onclick="submitScript()">Host Script</button>
+
+        <div class="stack-lg">
+          <div class="field">
+            <label for="apiKeyInput">API Key</label>
+            <input id="apiKeyInput" type="text" placeholder="Enter your API Key" autocomplete="off" />
           </div>
+
+          <button id="apiLoginButton" class="button primary">Login with API Key</button>
+
+          <div class="divider"><span>or</span></div>
+
+          <a class="button secondary full-width" href="/auth/discord">Login with Discord</a>
         </div>
-        
-        <div id="scriptsList" class="grid"></div>
-      </div>
-      
-      <script>
-        let currentData = { scripts: [], panels: [], keys: [], bannedHWIDs: [] };
-        let serverTime = Date.now();
-        
-        async function loadData() {
-          try {
-            const res = await fetch('/api/data');
-            const data = await res.json();
-            if (data.error) return;
-            currentData = data;
-            serverTime = data.serverTime || Date.now();
-            renderAll();
-          } catch(e) { console.error(e); }
-        }
-        
-        function renderAll() {
-          renderScripts();
-          updateStats();
-        }
-        
-        function renderScripts() {
-          const container = document.getElementById('scriptsList');
-          const scripts = currentData.scripts || [];
-          
-          if (!scripts.length) {
-            container.innerHTML = '<p class="text-muted">No scripts yet. Upload one above.</p>';
-            return;
-          }
-          
-          container.innerHTML = scripts.map(s => {
-            const isObfuscated = s.obfuscated_code && s.obfuscated_code.length > 0;
-            const baseUrl = window.location.origin;
-            const loader = s.ffa_mode
-              ? \`loadstring(game:HttpGet("\${baseUrl}/loader/\${s.id}"))()\`
-              : \`script_key = "YOUR_KEY_HERE"\\nloadstring(game:HttpGet("\${baseUrl}/loader/\${s.id}?key=" .. script_key))()\`;
-            
-            return \`
-              <div class="script-card">
-                <div style="font-weight:600;font-size:16px;">\${escapeHtml(s.name)}</div>
-                <div style="font-size:12px;color:#475569;margin:4px 0;">ID: \${s.id}</div>
-                <div style="margin:6px 0;">
-                  <span class="badge \${s.status === 'active' ? 'badge-active' : 'badge-disabled'}">\${s.status}</span>
-                  \${s.ffa_mode ? '<span class="badge badge-ffa">Open</span>' : ''}
-                  \${isObfuscated ? '<span class="badge badge-obfuscated">Obfuscated</span>' : ''}
-                </div>
-                <div class="loader-box" onclick="copyLoader(this)">\${escapeHtml(loader)}</div>
-                <div class="flex">
-                  <button class="btn btn-secondary" onclick="toggleScript('\${s.id}')">\${s.status === 'active' ? 'Disable' : 'Enable'}</button>
-                  <button class="btn btn-secondary" onclick="toggleFfa('\${s.id}')">\${s.ffa_mode ? 'Close' : 'Open'}</button>
-                  \${!isObfuscated ? '<button class="btn" style="background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:#fff;" onclick="obfuscateScript(\'' + s.id + '\')">Obfuscate</button>' : ''}
-                  <button class="btn btn-danger" onclick="deleteScript('\${s.id}')">Delete</button>
-                </div>
-              </div>
-            \`;
-          }).join('');
-        }
-        
-        function updateStats() {
-          document.getElementById('statScripts').textContent = currentData.scripts?.length || 0;
-          document.getElementById('statPanels').textContent = currentData.panels?.length || 0;
-          document.getElementById('statKeys').textContent = currentData.keys?.length || 0;
-          document.getElementById('statHwids').textContent = currentData.bannedHWIDs?.length || 0;
-        }
-        
-        function escapeHtml(text) {
-          const div = document.createElement('div');
-          div.textContent = text;
-          return div.innerHTML;
-        }
-        
-        function copyLoader(el) {
-          navigator.clipboard.writeText(el.textContent).then(() => {
-            el.style.borderColor = '#22c3ff';
-            setTimeout(() => el.style.borderColor = '', 500);
-          });
-        }
-        
-        async function submitScript() {
-          const name = document.getElementById('scriptName').value.trim();
-          const code = document.getElementById('scriptCode').value;
-          const ffaMode = document.getElementById('ffaModeCheck').checked;
-          const compressMode = document.getElementById('compressModeCheck').checked;
-          
-          if (!name || !code) return alert('Enter name and code.');
-          
-          try {
-            const res = await fetch('/api/create-script', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name, code, ffaMode, compressMode })
-            });
-            const data = await res.json();
-            if (data.success) {
-              document.getElementById('scriptName').value = '';
-              document.getElementById('scriptCode').value = '';
-              document.getElementById('ffaModeCheck').checked = false;
-              document.getElementById('compressModeCheck').checked = false;
-              loadData();
-            } else {
-              alert('Error: ' + (data.error || 'Unknown error'));
-            }
-          } catch(e) { alert('Error: ' + e.message); }
-        }
-        
-        async function toggleScript(id) {
-          await fetch('/api/scripts/' + id + '/toggle', { method: 'PUT' });
-          loadData();
-        }
-        
-        async function toggleFfa(id) {
-          await fetch('/api/scripts/' + id + '/ffa', { method: 'PUT' });
-          loadData();
-        }
-        
-        async function obfuscateScript(id) {
-          try {
-            const res = await fetch('/api/obfuscate-script', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ scriptId: id })
-            });
-            const data = await res.json();
-            if (data.success) {
-              alert('Script obfuscated!');
-              loadData();
-            } else {
-              alert('Error: ' + (data.error || 'Unknown error'));
-            }
-          } catch(e) { alert('Error: ' + e.message); }
-        }
-        
-        async function deleteScript(id) {
-          if (!confirm('Delete this script?')) return;
-          await fetch('/api/delete-script', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id })
-          });
-          loadData();
-        }
-        
-        loadData();
-        setInterval(loadData, 15000);
-      </script>
-    </body>
-    </html>
-  `);
+
+        <p class="helper-text">Need an API key? Contact the owner.</p>
+      </section>
+    </main>`;
+
+  res.send(pageShell({ title: 'LuaObfuscationHub', body, inlineScript: INLINE_LOGIN_JS }));
 });
 
-// ============ DISCORD BOT ============
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), uptime: process.uptime() });
+});
+
+app.get('/dashboard', requireAuth, (req, res) => {
+  const user = req.session.user;
+  const body = `
+    <div class="site-bg"></div>
+    <div class="dashboard-shell">
+      <aside class="sidebar panel">
+        <div class="brand-row">
+          <div class="brand-mark small">L</div>
+          <div>
+            <div class="brand-name">LuaObfuscationHub</div>
+            <div class="sidebar-caption">Cyberpunk control panel</div>
+          </div>
+        </div>
+
+        <div class="user-summary">
+          <img src="${escapeHtml(buildAvatarUrl(user))}" alt="Avatar" class="avatar" />
+          <div>
+            <div class="user-name">${escapeHtml(user.username)}</div>
+            <div class="user-role">${user.is_owner ? '👑 Owner' : 'User'}</div>
+          </div>
+        </div>
+
+        <nav class="nav-list">
+          <button class="nav-link active" data-view="scripts">📜 Scripts</button>
+          <button class="nav-link" data-view="panels">📋 Panels</button>
+          <button class="nav-link" data-view="keys">🔑 Keys</button>
+          <button class="nav-link" data-view="hwids">🚫 HWID Bans</button>
+          ${user.is_owner ? '<button class="nav-link" data-view="admin">⚙️ Admin Panel</button>' : ''}
+        </nav>
+
+        <div class="sidebar-footer">
+          <a class="button secondary full-width" href="/logout">🚪 Logout</a>
+        </div>
+      </aside>
+
+      <main class="content-area">
+        <header class="topbar panel">
+          <div>
+            <p class="eyebrow">Dashboard</p>
+            <h1 id="pageTitle">📜 Scripts</h1>
+            <p class="muted">Manage hosting, access, keys, panels, and obfuscation.</p>
+          </div>
+          <div class="topbar-actions">
+            <button class="button secondary" id="refreshButton">Refresh</button>
+            <div class="live-pill"><span class="live-dot"></span> Live sync</div>
+          </div>
+        </header>
+
+        <section class="stats-grid" id="statsGrid">
+          <article class="stat-card panel">
+            <span class="stat-label">📜 Scripts</span>
+            <strong class="stat-value" id="statScripts">0</strong>
+            <span class="stat-meta" id="statScriptsMeta">0 remaining</span>
+          </article>
+          <article class="stat-card panel">
+            <span class="stat-label">📋 Panels</span>
+            <strong class="stat-value" id="statPanels">0</strong>
+            <span class="stat-meta" id="statPanelsMeta">0 remaining</span>
+          </article>
+          <article class="stat-card panel">
+            <span class="stat-label">🔑 License Keys</span>
+            <strong class="stat-value" id="statKeys">0</strong>
+            <span class="stat-meta" id="statKeysMeta">Active inventory</span>
+          </article>
+          <article class="stat-card panel">
+            <span class="stat-label">🚫 Banned HWIDs</span>
+            <strong class="stat-value" id="statHwids">0</strong>
+            <span class="stat-meta" id="statHwidsMeta">Current blocks</span>
+          </article>
+        </section>
+
+        <section id="view-scripts" class="view active stack-xl">
+          <div class="panel section-card">
+            <div class="section-header">
+              <div>
+                <h2>📜 Upload Script</h2>
+                <p class="muted">Save your Lua source and optionally obfuscate it after upload.</p>
+              </div>
+            </div>
+            <div class="form-grid two">
+              <div class="field">
+                <label for="scriptName">Script name</label>
+                <input id="scriptName" type="text" placeholder="Example: Main loader" />
+              </div>
+              <div class="field checkbox-group">
+                <label class="check"><input id="ffaModeCheck" type="checkbox" /> 🔓 FFA Mode (No key required)</label>
+                <label class="check"><input id="compressModeCheck" type="checkbox" /> 🔮 Auto-Obfuscate</label>
+              </div>
+              <div class="field full">
+                <label for="scriptCode">Source code</label>
+                <textarea id="scriptCode" rows="12" class="mono" placeholder="Paste your Lua code here"></textarea>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button class="button primary" id="saveScriptButton">⚡ Host Script</button>
+            </div>
+          </div>
+
+          <div class="section-header inline-header">
+            <div>
+              <h2>Your Scripts</h2>
+              <p class="muted">Saved scripts, loaders, and access settings.</p>
+            </div>
+            <span class="count-badge" id="scriptsCount">0 items</span>
+          </div>
+          <div id="scriptsList" class="resource-grid"></div>
+        </section>
+
+        <section id="view-panels" class="view stack-xl">
+          <div class="panel section-card">
+            <div class="section-header">
+              <div>
+                <h2>📋 Create Panel</h2>
+                <p class="muted">Choose a script and send a Discord access panel to a channel.</p>
+              </div>
+            </div>
+            <div class="form-grid two">
+              <div class="field">
+                <label for="panelName">Panel name</label>
+                <input id="panelName" type="text" placeholder="Example: Main access panel" />
+              </div>
+              <div class="field">
+                <label for="panelChannelId">Discord channel ID</label>
+                <input id="panelChannelId" type="text" placeholder="123456789012345678" />
+              </div>
+              <div class="field full">
+                <label for="panelDescription">Description</label>
+                <textarea id="panelDescription" rows="4" placeholder="Optional description shown in Discord"></textarea>
+              </div>
+              <div class="field">
+                <label for="panelScriptId">Script</label>
+                <select id="panelScriptId"><option value="">Select script</option></select>
+              </div>
+              <div class="field">
+                <label for="panelHwidCooldown">HWID cooldown (seconds)</label>
+                <input id="panelHwidCooldown" type="number" value="180" min="0" />
+              </div>
+            </div>
+            <div class="form-actions">
+              <button class="button primary" id="savePanelButton">⚡ Create Panel</button>
+            </div>
+          </div>
+
+          <div class="section-header inline-header">
+            <div>
+              <h2>Your panels</h2>
+              <p class="muted">Panels linked to Discord channels.</p>
+            </div>
+            <span class="count-badge" id="panelsCount">0 items</span>
+          </div>
+          <div id="panelsList" class="resource-grid"></div>
+        </section>
+
+        <section id="view-keys" class="view stack-xl">
+          <div class="panel section-card">
+            <div class="section-header">
+              <div>
+                <h2>🔑 Generate License Key</h2>
+                <p class="muted">Issue a license key for a panel with an optional expiration window.</p>
+              </div>
+            </div>
+            <div class="form-grid two">
+              <div class="field">
+                <label for="keyPanelId">Panel</label>
+                <select id="keyPanelId"><option value="">Select panel</option></select>
+              </div>
+              <div class="field">
+                <label for="keyDuration">Duration in hours</label>
+                <input id="keyDuration" type="number" min="0" placeholder="0 for permanent" />
+              </div>
+              <div class="field full">
+                <label for="keyNote">Note</label>
+                <input id="keyNote" type="text" placeholder="Optional note" />
+              </div>
+            </div>
+            <div class="form-actions">
+              <button class="button primary" id="generateKeyButton">⚡ Generate Key</button>
+            </div>
+          </div>
+
+          <div class="section-header inline-header">
+            <div>
+              <h2>Your keys</h2>
+              <p class="muted">View status, expiration, and claim state.</p>
+            </div>
+            <span class="count-badge" id="keysCount">0 items</span>
+          </div>
+          <div id="keysList" class="resource-grid"></div>
+        </section>
+
+        <section id="view-hwids" class="view stack-xl">
+          <div class="panel section-card">
+            <div class="section-header">
+              <div>
+                <h2>🚫 Ban HWID</h2>
+                <p class="muted">Block a device identifier from using protected scripts.</p>
+              </div>
+            </div>
+            <div class="form-grid two">
+              <div class="field">
+                <label for="banHwidInput">HWID</label>
+                <input id="banHwidInput" type="text" placeholder="Paste HWID" />
+              </div>
+              <div class="field">
+                <label for="banReason">Reason</label>
+                <input id="banReason" type="text" placeholder="Optional reason" />
+              </div>
+            </div>
+            <div class="form-actions">
+              <button class="button primary" id="banHwidButton">🚫 Ban</button>
+            </div>
+          </div>
+
+          <div class="section-header inline-header">
+            <div>
+              <h2>Banned HWIDs</h2>
+              <p class="muted">Review blocked identifiers.</p>
+            </div>
+            <span class="count-badge" id="hwidsCount">0 items</span>
+          </div>
+          <div id="hwidList" class="resource-grid"></div>
+        </section>
+
+        ${user.is_owner ? `
+        <section id="view-admin" class="view stack-xl">
+          <div class="panel section-card">
+            <div class="section-header">
+              <div>
+                <h2>⚙️ Admin Panel</h2>
+                <p class="muted">Generate API keys and assign access limits.</p>
+              </div>
+            </div>
+            <div class="form-grid two">
+              <div class="field">
+                <label for="adminUserId">User ID or Discord ID</label>
+                <input id="adminUserId" type="text" placeholder="User ID or Discord ID" />
+              </div>
+              <div class="field">
+                <label for="adminExpiresDays">Expires in days</label>
+                <input id="adminExpiresDays" type="number" min="0" placeholder="0 for never" />
+              </div>
+              <div class="field">
+                <label for="adminMaxScripts">Max scripts</label>
+                <input id="adminMaxScripts" type="number" min="0" value="${DEFAULT_MAX_SCRIPTS}" />
+              </div>
+              <div class="field">
+                <label for="adminMaxPanels">Max panels</label>
+                <input id="adminMaxPanels" type="number" min="0" value="${DEFAULT_MAX_PANELS}" />
+              </div>
+              <div class="field full">
+                <label for="adminNotes">Notes</label>
+                <input id="adminNotes" type="text" placeholder="Optional note" />
+              </div>
+            </div>
+            <div class="form-actions">
+              <button class="button primary" id="adminGenerateKeyButton">⚡ Generate API Key</button>
+            </div>
+          </div>
+
+          <div class="section-header inline-header">
+            <div>
+              <h2>API keys</h2>
+              <p class="muted">Monitor active and revoked keys.</p>
+            </div>
+            <span class="count-badge" id="apiKeysCount">0 items</span>
+          </div>
+          <div id="apiKeysList" class="resource-grid"></div>
+        </section>` : ''}
+      </main>
+    </div>
+
+    <div id="toastRoot" class="toast-root"></div>`;
+
+  res.send(
+    pageShell({
+      title: 'LuaObfuscationHub Dashboard',
+      body,
+      inlineScript: INLINE_DASHBOARD_JS,
+      appData: {
+        user: {
+          ...user,
+          avatarUrl: buildAvatarUrl(user),
+        },
+        defaults: {
+          maxScripts: DEFAULT_MAX_SCRIPTS,
+          maxPanels: DEFAULT_MAX_PANELS,
+        },
+        baseUrl: publicBaseUrl(),
+      },
+    })
+  );
+});
+
 const client = new Client({
   intents: [GatewayIntentBits.Guilds],
   partials: [Partials.Channel, Partials.Message],
