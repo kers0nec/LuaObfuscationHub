@@ -4,11 +4,11 @@ const defaults = APP.defaults || { maxScripts: 100, maxPanels: 50 };
 const baseUrl = APP.baseUrl || window.location.origin;
 
 const viewTitles = {
-  scripts: 'Scripts',
-  panels: 'Panels',
-  keys: 'Keys',
-  hwids: 'HWID bans',
-  admin: 'Admin',
+  scripts: '📜 Scripts',
+  panels: '📋 Panels',
+  keys: '🔑 Keys',
+  hwids: '🚫 HWID Bans',
+  admin: '⚙️ Admin Panel',
 };
 
 let currentData = {
@@ -150,9 +150,9 @@ function renderScripts() {
           `loadstring(game:HttpGet("${baseUrl}/script/${script.id}?key=" .. script_key .. "&hwid=" .. game:GetService("HttpService"):GenerateGUID(false)))()`,
         ].join('\n');
 
-    const statusBadge = badge(script.status === 'active' ? 'Active' : 'Disabled', script.status === 'active' ? 'success' : 'danger');
-    const accessBadge = badge(script.ffa_mode ? 'Free access' : 'Key required', script.ffa_mode ? 'warning' : 'info');
-    const obfuscationBadge = badge(isObfuscated ? 'Obfuscated' : 'Plain source', isObfuscated ? 'info' : 'warning');
+    const statusBadge = badge(script.status === 'active' ? '✅ Active' : '⛔ Disabled', script.status === 'active' ? 'success' : 'danger');
+    const accessBadge = badge(script.ffa_mode ? '🔓 FFA' : '🔒 Key Required', script.ffa_mode ? 'warning' : 'info');
+    const obfuscationBadge = badge(isObfuscated ? '🔮 Obfuscated' : 'Plain source', isObfuscated ? 'info' : 'warning');
 
     return `
       <article class="resource-card">
@@ -177,10 +177,10 @@ function renderScripts() {
         </div>
 
         <div class="action-row">
-          <button class="button secondary small" onclick="toggleScript('${script.id}')">${script.status === 'active' ? 'Disable' : 'Enable'}</button>
-          <button class="button secondary small" onclick="toggleFfa('${script.id}')">${script.ffa_mode ? 'Disable free access' : 'Enable free access'}</button>
-          ${isObfuscated ? '' : `<button class="button primary small" onclick="obfuscateScript('${script.id}')">Obfuscate</button>`}
-          <button class="button danger small" onclick="deleteScript('${script.id}')">Delete</button>
+            <button class="button secondary small" onclick="toggleScript('${script.id}')">${script.status === 'active' ? '⏸ Disable' : '▶ Enable'}</button>
+          <button class="button secondary small" onclick="toggleFfa('${script.id}')">${script.ffa_mode ? '🔓 Disable FFA' : '🔒 Enable FFA'}</button>
+          ${isObfuscated ? '' : `<button class="button primary small" onclick="obfuscateScript('${script.id}')">🔮 Obfuscate</button>`}
+          <button class="button danger small" onclick="deleteScript('${script.id}')">✕</button>
         </div>
       </article>
     `;
@@ -206,7 +206,7 @@ function renderPanels() {
             <h3>${escapeHtml(panel.name)}</h3>
             <div class="resource-meta">${escapeHtml(panel.description || 'No description')}</div>
           </div>
-          <div class="badge-row">${badge('Panel', 'info')}</div>
+          <div class="badge-row">${badge('📋 Panel', 'info')}</div>
         </div>
 
         <div class="meta-list">
@@ -217,8 +217,8 @@ function renderPanels() {
         </div>
 
         <div class="action-row">
-          <button class="button primary small" onclick="sendPanel('${panel.id}')">Send to Discord</button>
-          <button class="button danger small" onclick="deletePanel('${panel.id}')">Delete</button>
+          <button class="button primary small" onclick="sendPanel('${panel.id}')">📤 Send</button>
+          <button class="button danger small" onclick="deletePanel('${panel.id}')">✕</button>
         </div>
       </article>
     `;
@@ -239,10 +239,10 @@ function renderKeys() {
     const panel = getPanelById(row.panel_id);
     const script = getScriptById(row.script_id);
     const status = isExpired(row.expires_at)
-      ? badge('Expired', 'danger')
+      ? badge('❌ Expired', 'danger')
       : row.claimed_by
-        ? badge('Claimed', 'warning')
-        : badge('Available', 'success');
+        ? badge('📌 Claimed', 'warning')
+        : badge('✅ Active', 'success');
 
     return `
       <article class="resource-card">
@@ -262,8 +262,8 @@ function renderKeys() {
         </div>
 
         <div class="action-row">
-          <button class="button secondary small" onclick='copyText(${JSON.stringify(row.key)})'>Copy key</button>
-          <button class="button danger small" onclick="deleteKey('${row.key}')">Delete</button>
+          <button class="button secondary small" onclick='copyText(${JSON.stringify(row.key)})'>Copy</button>
+          <button class="button danger small" onclick="deleteKey('${row.key}')">✕</button>
         </div>
       </article>
     `;
@@ -287,7 +287,7 @@ function renderHwids() {
           <h3 class="mono-inline">${escapeHtml(row.hwid)}</h3>
           <div class="resource-meta">${escapeHtml(row.reason || 'No reason provided')}</div>
         </div>
-        <div class="badge-row">${badge('Blocked', 'danger')}</div>
+          <div class="badge-row">${badge('🚫 Blocked', 'danger')}</div>
       </div>
 
       <div class="meta-list">
@@ -295,7 +295,7 @@ function renderHwids() {
       </div>
 
       <div class="action-row">
-        <button class="button danger small" onclick="unbanHwid('${row.hwid}')">Unban</button>
+        <button class="button danger small" onclick="unbanHwid('${row.hwid}')">↺ Unban</button>
       </div>
     </article>
   `).join('');
@@ -314,10 +314,10 @@ function renderApiKeys() {
 
   list.innerHTML = rows.map((row) => {
     const status = !row.is_active
-      ? badge('Revoked', 'danger')
+      ? badge('❌ Revoked', 'danger')
       : isExpired(row.expires_at)
-        ? badge('Expired', 'warning')
-        : badge('Active', 'success');
+        ? badge('⏰ Expired', 'warning')
+        : badge('✅ Active', 'success');
 
     return `
       <article class="resource-card">
@@ -337,7 +337,7 @@ function renderApiKeys() {
         </div>
 
         <div class="action-row">
-          <button class="button secondary small" onclick='copyText(${JSON.stringify(row.key)})'>Copy key</button>
+          <button class="button secondary small" onclick='copyText(${JSON.stringify(row.key)})'>Copy</button>
           ${row.is_active ? `<button class="button danger small" onclick="revokeApiKey('${row.key}')">Revoke</button>` : ''}
         </div>
       </article>
