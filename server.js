@@ -1301,7 +1301,7 @@ const viewTitles = {
 };
 
 const viewDescriptions = {
-  scripts: 'Manage hosted scripts, loadstrings, FFA mode, and upload flow.'
+  scripts: 'Manage hosted scripts, loadstrings, FFA mode, and upload flow.',
   panels: 'Create polished Discord panels and role-enabled access buttons.',
   keys: 'Generate, assign, copy, and revoke access keys.',
   hwids: 'Manage blocked hardware identifiers and enforcement.',
@@ -1461,6 +1461,7 @@ function renderScripts() {
           <div class="badge-row">
             ${badge(script.status === 'active' ? 'Active' : 'Disabled', script.status === 'active' ? 'success' : 'danger')}
             ${badge(script.ffa_mode ? 'FFA Mode' : 'Key Required', script.ffa_mode ? 'warning' : 'info')}
+            ${badge(script.obfuscated_code ? 'Obfuscated' : 'Source', script.obfuscated_code ? 'info' : 'warning')}
           </div>
         </div>
 
@@ -1468,6 +1469,7 @@ function renderScripts() {
           <div class="meta-item"><strong>Script ID</strong><span>${escapeHtml(script.id)}</span></div>
           <div class="meta-item"><strong>Hosted Path</strong><span>${escapeHtml(script.public_id || '')}</span></div>
           <div class="meta-item"><strong>Delivery</strong><span>${script.ffa_mode ? 'Direct access' : 'Key protected'}</span></div>
+          <div class="meta-item"><strong>Build</strong><span>${script.obfuscated_code ? 'HQ99 obfuscated' : 'Raw source'}</span></div>
         </div>
 
         <div class="code-block">
@@ -1490,6 +1492,7 @@ function renderScripts() {
           <button class="button secondary small" onclick="editScript('${script.id}')">Edit</button>
           <button class="button secondary small" onclick="toggleScript('${script.id}')">${script.status === 'active' ? 'Disable' : 'Enable'}</button>
           <button class="button secondary small" onclick="toggleFfa('${script.id}')">${script.ffa_mode ? 'Disable FFA' : 'Enable FFA'}</button>
+          <button class="button primary small" onclick="obfuscateScript('${script.id}')">Compress</button>
           <button class="button danger small" onclick="deleteScript('${script.id}')">Delete</button>
         </div>
       </article>
@@ -1544,6 +1547,7 @@ function resetScriptForm() {
   qs('scriptName').value = '';
   qs('scriptCode').value = '';
   qs('ffaModeCheck').checked = false;
+  qs('compressModeCheck').checked = true;
   qs('editorFileLabel').textContent = 'untitled.lua';
   qs('saveScriptButton').textContent = 'Save script';
   qs('cancelScriptEditButton').classList.add('hidden');
@@ -1561,6 +1565,7 @@ function editScript(id) {
   qs('scriptName').value = script.name || '';
   qs('scriptCode').value = script.code || '';
   qs('ffaModeCheck').checked = Boolean(script.ffa_mode);
+  qs('compressModeCheck').checked = Boolean(script.obfuscated_code);
   qs('editorFileLabel').textContent = `${script.name || 'script'}.lua`;
   qs('saveScriptButton').textContent = 'Update script';
   qs('cancelScriptEditButton').classList.remove('hidden');
@@ -1834,6 +1839,7 @@ async function submitScript() {
   const name = qs('scriptName').value.trim();
   const code = qs('scriptCode').value;
   const ffaMode = qs('ffaModeCheck').checked;
+  const compressMode = qs('compressModeCheck').checked;
   if (!name || !code.trim()) {
     notify('Missing fields', 'Enter a script name and source code.', 'error');
     return;
@@ -1841,17 +1847,40 @@ async function submitScript() {
 
   try {
     const isEditing = Boolean(editingScriptId);
-    await requestJSON(isEditing ? `/api/scripts/${editingScriptId}` : '/api/create-script', {
+    const data = await requestJSON(isEditing ? `/api/scripts/${editingScriptId}` : '/api/create-script', {
       method: isEditing ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, code, ffaMode }),
+      body: JSON.stringify({ name, code, ffaMode, compressMode }),
     });
 
+    const targetId = data.id || editingScriptId;
     resetScriptForm();
-    await loadData({ silent: true });
-    notify(isEditing ? 'Script updated' : 'Script saved', isEditing ? 'The script has been updated successfully.' : 'The script has been saved successfully.');
+
+    if (compressMode) {
+      notify(isEditing ? 'Script updated' : 'Script saved', isEditing ? 'Script updated. HQ99 obfuscation is running now.' : 'Script saved. HQ99 obfuscation is running now.');
+      await obfuscateScript(targetId, true);
+    } else {
+      await loadData({ silent: true });
+      notify(isEditing ? 'Script updated' : 'Script saved', isEditing ? 'The script has been updated successfully.' : 'The script has been saved successfully.');
+    }
   } catch (error) {
     notify('Save failed', error.message || 'Unable to save script.', 'error');
+  }
+}
+
+async function obfuscateScript(scriptId, silent = false) {
+  try {
+    await requestJSON('/api/obfuscate-script', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scriptId }),
+    });
+    await loadData({ silent: true });
+    if (!silent) notify('HQ99 complete', 'The script was obfuscated successfully.');
+    if (silent) notify('HQ99 complete', 'The saved script was auto-obfuscated successfully.');
+  } catch (error) {
+    notify('Obfuscation failed', error.message || 'Unable to obfuscate this script.', 'error');
+    throw error;
   }
 }
 
@@ -2238,6 +2267,7 @@ function attachEvents() {
 
 window.submitScript = submitScript;
 window.editScript = editScript;
+window.obfuscateScript = obfuscateScript;
 window.toggleScript = toggleScript;
 window.toggleFfa = toggleFfa;
 window.deleteScript = deleteScript;
@@ -3012,6 +3042,7 @@ app.post('/api/create-script', requireAuth, (req, res) => {
   const name = String(req.body.name || '').trim();
   const code = String(req.body.code || '');
   const ffaMode = Boolean(req.body.ffaMode);
+  const compressMode = Boolean(req.body.compressMode);
 
   if (!name || !code.trim()) {
     return res.status(400).json({ error: 'Missing name or code' });
@@ -3022,7 +3053,7 @@ app.post('/api/create-script', requireAuth, (req, res) => {
   db.prepare(
     `INSERT INTO scripts (id, user_id, name, code, obfuscated_code, public_id, obfuscator, ffa_mode, compress_mode)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(id, user.id, name, code, null, publicId, DEFAULT_OBFUSCATOR, ffaMode ? 1 : 0, 0);
+  ).run(id, user.id, name, code, null, publicId, DEFAULT_OBFUSCATOR, ffaMode ? 1 : 0, compressMode ? 1 : 0);
 
   res.json({
     success: true,
@@ -3040,6 +3071,7 @@ app.put('/api/scripts/:id', requireAuth, (req, res) => {
   const name = String(req.body.name || '').trim();
   const code = String(req.body.code || '');
   const ffaMode = Boolean(req.body.ffaMode);
+  const compressMode = Boolean(req.body.compressMode);
 
   if (!name || !code.trim()) {
     return res.status(400).json({ error: 'Missing name or code' });
@@ -3049,9 +3081,9 @@ app.put('/api/scripts/:id', requireAuth, (req, res) => {
 
   db.prepare(
     `UPDATE scripts
-     SET name = ?, code = ?, obfuscated_code = NULL, ffa_mode = ?, compress_mode = 0, updated_at = CURRENT_TIMESTAMP
+     SET name = ?, code = ?, obfuscated_code = NULL, ffa_mode = ?, compress_mode = ?, updated_at = CURRENT_TIMESTAMP
      WHERE id = ?`
-  ).run(name, code, ffaMode ? 1 : 0, id);
+  ).run(name, code, ffaMode ? 1 : 0, compressMode ? 1 : 0, id);
 
   res.json({
     success: true,
@@ -3061,7 +3093,22 @@ app.put('/api/scripts/:id', requireAuth, (req, res) => {
 });
 
 app.post('/api/obfuscate-script', requireAuth, async (req, res) => {
-  return res.status(410).json({ error: 'Obfuscation has been removed from this build.' });
+  const { scriptId } = req.body;
+  if (!scriptId) return res.status(400).json({ error: 'Script ID required' });
+
+  const user = req.session.user;
+  const script = db.prepare('SELECT * FROM scripts WHERE id = ? AND user_id = ?').get(scriptId, user.id);
+  if (!script) return res.status(404).json({ error: 'Script not found' });
+
+  try {
+    const obfuscatedCode = await obfuscateWithHq99(script.code || '');
+    db.prepare(
+      'UPDATE scripts SET obfuscated_code = ?, compress_mode = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+    ).run(obfuscatedCode, scriptId);
+    res.json({ success: true, obfuscatedCode });
+  } catch (error) {
+    res.status(500).json({ error: `HQ99 obfuscation failed: ${error.message}` });
+  }
 });
 
 app.post('/api/delete-script', requireAuth, (req, res) => {
@@ -3286,7 +3333,7 @@ function sendScriptContent(script, key, hwid, res) {
   if (script.status === 'disabled') return res.status(403).type('text/plain').send('-- Script disabled');
 
   if (script.ffa_mode) {
-    return res.type('text/plain').send(script.code || '-- Empty');
+    return res.type('text/plain').send(script.obfuscated_code || script.code || '-- Empty');
   }
 
   if (!key) return res.status(403).type('text/plain').send('-- Missing key');
@@ -3310,7 +3357,7 @@ function sendScriptContent(script, key, hwid, res) {
     db.prepare('UPDATE license_keys SET last_used_at = CURRENT_TIMESTAMP WHERE key = ?').run(keyRecord.key);
   }
 
-  return res.type('text/plain').send(script.code || '-- Empty');
+  return res.type('text/plain').send(script.obfuscated_code || script.code || '-- Empty');
 }
 
 function buildHostedLoaderSource(script) {
@@ -3530,6 +3577,7 @@ app.get('/dashboard', requireAuth, (req, res) => {
               </div>
               <div class="toggle-grid full">
                 <label class="switch-card"><input id="ffaModeCheck" type="checkbox" /> <span>FFA Mode (no key required)</span></label>
+                <label class="switch-card"><input id="compressModeCheck" type="checkbox" checked /> <span>Auto obfuscate with HQ99</span></label>
               </div>
               <div class="field full">
                 <label for="scriptCode">Script source</label>
