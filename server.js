@@ -48,7 +48,6 @@ const DEFAULT_MAX_PANELS = Number(process.env.DEFAULT_MAX_PANELS || 50);
 const OBF_API_URL = process.env.OBF_API_URL || 'https://kers0ne-0bf.lovable.app/api/public/obfuscate';
 const OBF_API_KEY = process.env.OBF_API_KEY || 'kers0neontop123';
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
-const PUBLIC_DIR = path.join(__dirname, 'public');
 
 console.log('LuaObfuscationHub starting');
 console.log('Domain:', PUBLIC_BASE_URL);
@@ -204,17 +203,1513 @@ function safeSerialize(value) {
     .replace(/&/g, '\\u0026');
 }
 
-function readOptionalFile(filePath, fallback = '') {
-  try {
-    return fs.readFileSync(filePath, 'utf8');
-  } catch {
-    return fallback;
+function textBlock(fn) {
+  return fn
+    .toString()
+    .replace(/^[\s\S]*?\/\*/, '')
+    .replace(/\*\/[\s\S]*$/, '')
+    .trim();
+}
+
+const INLINE_APP_CSS = textBlock(function () {/*
+:root {
+  --bg: #0a0a0f;
+  --bg-2: #0d1117;
+  --panel: rgba(18, 18, 24, 0.86);
+  --panel-2: rgba(14, 14, 20, 0.92);
+  --border: rgba(0, 212, 255, 0.14);
+  --border-strong: rgba(0, 212, 255, 0.32);
+  --text: #e2e8f0;
+  --muted: rgba(148, 163, 184, 0.86);
+  --accent: #00d4ff;
+  --accent-2: #0891b2;
+  --success: #22c55e;
+  --warning: #fbbf24;
+  --danger: #ef4444;
+  --shadow: 0 0 40px rgba(0, 212, 255, 0.06);
+  --radius-lg: 22px;
+  --radius-md: 16px;
+  --radius-sm: 10px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--text);
+  background: radial-gradient(circle at top left, rgba(0, 212, 255, 0.08), transparent 35%), var(--bg);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.site-bg {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.site-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.03;
+  background-image:
+    linear-gradient(rgba(0, 212, 255, 0.3) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 212, 255, 0.3) 1px, transparent 1px);
+  background-size: 50px 50px;
+}
+
+.site-bg::after {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(ellipse at 30% 40%, rgba(0, 212, 255, 0.08) 0%, transparent 60%);
+}
+
+.panel {
+  background: var(--panel);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  border-radius: var(--radius-md);
+}
+
+.auth-layout {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  position: relative;
+  z-index: 1;
+}
+
+.auth-card {
+  width: min(100%, 520px);
+  padding: 32px;
+  text-align: center;
+}
+
+.brand-block {
+  display: grid;
+  grid-template-columns: 1fr;
+  justify-items: center;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.brand-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.brand-mark {
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--accent);
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.16), rgba(8, 145, 178, 0.06));
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  box-shadow: 0 0 30px rgba(0, 212, 255, 0.12);
+}
+
+.brand-mark.small {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  font-size: 18px;
+}
+
+.brand-name {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--accent);
+  text-shadow: 0 0 20px rgba(0, 212, 255, 0.25);
+}
+
+.sidebar-caption,
+.helper-text,
+.muted,
+.resource-meta,
+.user-role,
+.stat-meta,
+.stat-label {
+  color: var(--muted);
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: var(--accent);
+  text-shadow: 0 0 20px rgba(0, 212, 255, 0.28);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: clamp(2rem, 4vw, 3rem);
+  color: var(--accent);
+  text-shadow: 0 0 20px rgba(0, 212, 255, 0.28);
+}
+
+h2 {
+  font-size: 1.2rem;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+h3 {
+  font-size: 1rem;
+}
+
+.stack-lg,
+.stack-xl,
+.field,
+.meta-list,
+.nav-list {
+  display: grid;
+}
+
+.stack-lg {
+  gap: 16px;
+}
+
+.stack-xl {
+  gap: 20px;
+}
+
+.field {
+  gap: 8px;
+  text-align: left;
+}
+
+.field label {
+  color: rgba(148, 214, 255, 0.8);
+  font-size: 0.92rem;
+}
+
+input,
+textarea,
+select {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.42);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 13px 14px;
+  border-radius: var(--radius-sm);
+  transition: 0.25s ease;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: rgba(148, 163, 184, 0.62);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.08);
+}
+
+textarea {
+  resize: vertical;
+}
+
+.mono,
+.code-block,
+.mono-inline,
+.code-actions button {
+  font-family: "Courier New", Consolas, monospace;
+}
+
+.checkbox-group {
+  align-content: center;
+  gap: 10px;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.92rem;
+  color: rgba(148, 214, 255, 0.8);
+}
+
+.check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.button:hover {
+  transform: translateY(-2px);
+}
+
+.button.primary {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #0a0a0f;
+  font-weight: 700;
+  box-shadow: 0 0 30px rgba(0, 212, 255, 0.2);
+}
+
+.button.secondary,
+.button.ghost {
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.12), rgba(8, 145, 178, 0.04));
+  color: var(--accent);
+}
+
+.button.danger {
+  background: rgba(239, 68, 68, 0.08);
+  color: #fda4af;
+  border-color: rgba(239, 68, 68, 0.22);
+}
+
+.button.small {
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 0.86rem;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.divider {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 14px;
+  align-items: center;
+  color: rgba(148, 214, 255, 0.4);
+  font-size: 0.85rem;
+}
+
+.divider::before,
+.divider::after {
+  content: "";
+  height: 1px;
+  background: rgba(0, 212, 255, 0.1);
+}
+
+.dashboard-shell {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 240px;
+  height: 100vh;
+  position: fixed;
+  inset: 0 auto 0 0;
+  padding: 20px;
+  border-right: 1px solid rgba(0, 212, 255, 0.1);
+  border-radius: 0;
+  background: rgba(18, 18, 24, 0.95);
+  overflow-y: auto;
+}
+
+.user-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+}
+
+.avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: 2px solid rgba(0, 212, 255, 0.25);
+  object-fit: cover;
+}
+
+.user-name {
+  font-weight: 600;
+}
+
+.nav-list {
+  gap: 8px;
+  margin-bottom: auto;
+}
+
+.nav-link {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #94a3b8;
+  padding: 10px 14px;
+  border-radius: 8px;
+  text-align: left;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.nav-link:hover {
+  background: rgba(0, 212, 255, 0.05);
+  color: var(--text);
+}
+
+.nav-link.active {
+  background: rgba(0, 212, 255, 0.1);
+  color: var(--accent);
+  border-left: 2px solid var(--accent);
+}
+
+.sidebar-footer {
+  margin-top: 20px;
+}
+
+.content-area {
+  margin-left: 240px;
+  padding: 20px 30px;
+  display: grid;
+  gap: 18px;
+}
+
+.topbar {
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.live-pill,
+.count-badge,
+.pill,
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+}
+
+.live-pill {
+  padding: 8px 12px;
+  color: rgba(148, 214, 255, 0.78);
+  border: 1px solid rgba(0, 212, 255, 0.12);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--success);
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.6);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.stat-card {
+  padding: 18px;
+  display: grid;
+  gap: 8px;
+}
+
+.stat-value {
+  font-size: 1.6rem;
+  color: var(--accent);
+}
+
+.view {
+  display: none;
+}
+
+.view.active {
+  display: block;
+}
+
+.section-card {
+  padding: 20px;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.inline-header {
+  margin-bottom: 12px;
+}
+
+.form-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.form-grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.form-grid .full {
+  grid-column: 1 / -1;
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: flex-start;
+  margin-top: 12px;
+}
+
+.count-badge,
+.pill {
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.24);
+  border: 1px solid rgba(0, 212, 255, 0.12);
+  color: rgba(148, 214, 255, 0.78);
+}
+
+.resource-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.resource-card {
+  background: rgba(18, 18, 24, 0.85);
+  border: 1px solid rgba(0, 212, 255, 0.1);
+  border-radius: 12px;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.resource-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.badge-row,
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.badge {
+  font-size: 0.72rem;
+  padding: 5px 10px;
+}
+
+.badge.info {
+  background: rgba(0, 212, 255, 0.15);
+  color: var(--accent);
+}
+
+.badge.success {
+  background: rgba(34, 197, 94, 0.15);
+  color: #86efac;
+}
+
+.badge.warning {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fcd34d;
+}
+
+.badge.danger {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+}
+
+.code-block {
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(0, 212, 255, 0.1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.code-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(0, 212, 255, 0.1);
+  color: rgba(148, 214, 255, 0.78);
+}
+
+.code-actions button {
+  background: transparent;
+  border: 0;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.code-block pre {
+  margin: 0;
+  padding: 12px;
+  font-size: 12px;
+  color: var(--accent);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.meta-list {
+  gap: 8px;
+}
+
+.meta-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.88rem;
+}
+
+.meta-item span:last-child {
+  color: rgba(148, 163, 184, 0.78);
+  text-align: right;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 32px;
+  color: rgba(148, 214, 255, 0.32);
+  border: 1px dashed rgba(0, 212, 255, 0.12);
+  border-radius: 12px;
+}
+
+.toast-root {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  display: grid;
+  gap: 10px;
+  z-index: 9999;
+}
+
+.toast {
+  min-width: 250px;
+  max-width: 360px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(18, 18, 24, 0.96);
+  border: 1px solid rgba(0, 212, 255, 0.14);
+  box-shadow: var(--shadow);
+}
+
+.toast.success {
+  border-color: rgba(34, 197, 94, 0.26);
+}
+
+.toast.error {
+  border-color: rgba(239, 68, 68, 0.24);
+}
+
+.toast-title {
+  font-weight: 700;
+}
+
+.toast-message {
+  font-size: 0.9rem;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+@media (max-width: 1100px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-const INLINE_APP_CSS = readOptionalFile(path.join(PUBLIC_DIR, 'app.css'));
-const INLINE_LOGIN_JS = readOptionalFile(path.join(PUBLIC_DIR, 'login.js'));
-const INLINE_DASHBOARD_JS = readOptionalFile(path.join(PUBLIC_DIR, 'dashboard.js'));
+@media (max-width: 768px) {
+  .dashboard-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: relative;
+    width: 100%;
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid rgba(0, 212, 255, 0.1);
+  }
+
+  .content-area {
+    margin-left: 0;
+    padding: 15px;
+  }
+
+  .form-grid.two,
+  .stats-grid,
+  .resource-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+*/});
+
+const INLINE_LOGIN_JS = textBlock(function () {/*
+async function loginWithApiKey() {
+  const input = document.getElementById('apiKeyInput');
+  const button = document.getElementById('apiLoginButton');
+  const apiKey = input.value.trim();
+
+  if (!apiKey) {
+    alert('Enter your API key.');
+    input.focus();
+    return;
+  }
+
+  button.disabled = true;
+  button.textContent = 'Signing in...';
+
+  try {
+    const response = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey }),
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || 'Login failed');
+    }
+
+    window.location.href = data.redirect || '/dashboard';
+  } catch (error) {
+    alert(error.message || 'Login failed');
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Login with API Key';
+  }
+}
+
+document.getElementById('apiLoginButton')?.addEventListener('click', loginWithApiKey);
+document.getElementById('apiKeyInput')?.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') loginWithApiKey();
+});
+
+*/});
+
+const INLINE_DASHBOARD_JS = textBlock(function () {/*
+const APP = window.__APP__ || {};
+const currentUser = APP.user || {};
+const defaults = APP.defaults || { maxScripts: 100, maxPanels: 50 };
+const baseUrl = APP.baseUrl || window.location.origin;
+
+const viewTitles = {
+  scripts: '📜 Scripts',
+  panels: '📋 Panels',
+  keys: '🔑 Keys',
+  hwids: '🚫 HWID Bans',
+  admin: '⚙️ Admin Panel',
+};
+
+let currentData = {
+  scripts: [],
+  panels: [],
+  keys: [],
+  bannedHWIDs: [],
+  limits: {
+    maxScripts: defaults.maxScripts,
+    currentScripts: 0,
+    remainingScripts: defaults.maxScripts,
+    maxPanels: defaults.maxPanels,
+    currentPanels: 0,
+    remainingPanels: defaults.maxPanels,
+  },
+};
+
+let apiKeysCache = [];
+let serverTime = Date.now();
+let currentView = 'scripts';
+
+function qs(id) {
+  return document.getElementById(id);
+}
+
+function escapeHtml(value) {
+  const node = document.createElement('div');
+  node.textContent = value == null ? '' : String(value);
+  return node.innerHTML;
+}
+
+function formatDate(value) {
+  if (!value) return 'Never';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Invalid date';
+  return date.toLocaleString();
+}
+
+function isExpired(value) {
+  return Boolean(value) && new Date(value).getTime() < serverTime;
+}
+
+function badge(label, type = 'info') {
+  return `<span class="badge ${type}">${escapeHtml(label)}</span>`;
+}
+
+function emptyState(message) {
+  return `<div class="empty-state">${escapeHtml(message)}</div>`;
+}
+
+function notify(title, message, type = 'success') {
+  const root = qs('toastRoot');
+  if (!root) return;
+
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.innerHTML = `
+    <div class="toast-title">${escapeHtml(title)}</div>
+    <div class="toast-message">${escapeHtml(message)}</div>
+  `;
+  root.appendChild(toast);
+
+  setTimeout(() => {
+    toast.remove();
+  }, 3200);
+}
+
+async function requestJSON(url, options = {}) {
+  const response = await fetch(url, options);
+
+  if (response.status === 401) {
+    window.location.href = '/';
+    throw new Error('Unauthorized');
+  }
+
+  const text = await response.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = { error: text || 'Request failed' };
+  }
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Request failed');
+  }
+
+  return data;
+}
+
+function getScriptById(id) {
+  return (currentData.scripts || []).find((script) => script.id === id);
+}
+
+function getPanelById(id) {
+  return (currentData.panels || []).find((panel) => panel.id === id);
+}
+
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => {
+    notify('Copied', 'The value has been copied to your clipboard.');
+  }).catch(() => {
+    notify('Copy failed', 'The browser blocked clipboard access.', 'error');
+  });
+}
+
+window.copyText = copyText;
+
+function updateSummary() {
+  const limits = currentData.limits || {};
+  const activeKeys = (currentData.keys || []).filter((row) => !isExpired(row.expires_at)).length;
+
+  qs('statScripts').textContent = `${limits.currentScripts || 0}/${limits.maxScripts || defaults.maxScripts}`;
+  qs('statScriptsMeta').textContent = `${limits.remainingScripts || 0} remaining`;
+  qs('statPanels').textContent = `${limits.currentPanels || 0}/${limits.maxPanels || defaults.maxPanels}`;
+  qs('statPanelsMeta').textContent = `${limits.remainingPanels || 0} remaining`;
+  qs('statKeys').textContent = String((currentData.keys || []).length);
+  qs('statKeysMeta').textContent = `${activeKeys} active`;
+  qs('statHwids').textContent = String((currentData.bannedHWIDs || []).length);
+  qs('statHwidsMeta').textContent = 'Current blocks';
+}
+
+function renderScripts() {
+  const list = qs('scriptsList');
+  const scripts = currentData.scripts || [];
+  qs('scriptsCount').textContent = `${scripts.length} item${scripts.length === 1 ? '' : 's'}`;
+
+  if (!scripts.length) {
+    list.innerHTML = emptyState('No scripts have been created yet.');
+    return;
+  }
+
+  list.innerHTML = scripts.map((script) => {
+    const isObfuscated = Boolean(script.obfuscated_code);
+    const loader = script.ffa_mode
+      ? `loadstring(game:HttpGet("${baseUrl}/loader/${script.id}"))()`
+      : [
+          'script_key = "YOUR_KEY_HERE"',
+          `loadstring(game:HttpGet("${baseUrl}/script/${script.id}?key=" .. script_key .. "&hwid=" .. game:GetService("HttpService"):GenerateGUID(false)))()`,
+        ].join('\n');
+
+    const statusBadge = badge(script.status === 'active' ? '✅ Active' : '⛔ Disabled', script.status === 'active' ? 'success' : 'danger');
+    const accessBadge = badge(script.ffa_mode ? '🔓 FFA' : '🔒 Key Required', script.ffa_mode ? 'warning' : 'info');
+    const obfuscationBadge = badge(isObfuscated ? '🔮 Obfuscated' : 'Plain source', isObfuscated ? 'info' : 'warning');
+
+    return `
+      <article class="resource-card">
+        <div class="resource-header">
+          <div>
+            <h3>${escapeHtml(script.name)}</h3>
+            <div class="resource-meta">Created ${escapeHtml(formatDate(script.created_at))}</div>
+          </div>
+          <div class="badge-row">
+            ${statusBadge}
+            ${accessBadge}
+            ${obfuscationBadge}
+          </div>
+        </div>
+
+        <div class="code-block">
+          <div class="code-actions">
+            <span>Loader snippet</span>
+            <button type="button" onclick='copyText(${JSON.stringify(loader)})'>Copy</button>
+          </div>
+          <pre>${escapeHtml(loader)}</pre>
+        </div>
+
+        <div class="action-row">
+            <button class="button secondary small" onclick="toggleScript('${script.id}')">${script.status === 'active' ? '⏸ Disable' : '▶ Enable'}</button>
+          <button class="button secondary small" onclick="toggleFfa('${script.id}')">${script.ffa_mode ? '🔓 Disable FFA' : '🔒 Enable FFA'}</button>
+          ${isObfuscated ? '' : `<button class="button primary small" onclick="obfuscateScript('${script.id}')">🔮 Obfuscate</button>`}
+          <button class="button danger small" onclick="deleteScript('${script.id}')">✕</button>
+        </div>
+      </article>
+    `;
+  }).join('');
+}
+
+function renderPanels() {
+  const list = qs('panelsList');
+  const panels = currentData.panels || [];
+  qs('panelsCount').textContent = `${panels.length} item${panels.length === 1 ? '' : 's'}`;
+
+  if (!panels.length) {
+    list.innerHTML = emptyState('No panels have been created yet.');
+    return;
+  }
+
+  list.innerHTML = panels.map((panel) => {
+    const script = getScriptById(panel.script_id);
+    return `
+      <article class="resource-card">
+        <div class="resource-header">
+          <div>
+            <h3>${escapeHtml(panel.name)}</h3>
+            <div class="resource-meta">${escapeHtml(panel.description || 'No description')}</div>
+          </div>
+          <div class="badge-row">${badge('📋 Panel', 'info')}</div>
+        </div>
+
+        <div class="meta-list">
+          <div class="meta-item"><strong>Script</strong><span>${escapeHtml(script?.name || panel.script_id)}</span></div>
+          <div class="meta-item"><strong>Channel</strong><span class="mono-inline">${escapeHtml(panel.channel_id)}</span></div>
+          <div class="meta-item"><strong>Cooldown</strong><span>${escapeHtml(String(panel.hwid_cooldown))} seconds</span></div>
+          <div class="meta-item"><strong>Created</strong><span>${escapeHtml(formatDate(panel.created_at))}</span></div>
+        </div>
+
+        <div class="action-row">
+          <button class="button primary small" onclick="sendPanel('${panel.id}')">📤 Send</button>
+          <button class="button danger small" onclick="deletePanel('${panel.id}')">✕</button>
+        </div>
+      </article>
+    `;
+  }).join('');
+}
+
+function renderKeys() {
+  const list = qs('keysList');
+  const keys = currentData.keys || [];
+  qs('keysCount').textContent = `${keys.length} item${keys.length === 1 ? '' : 's'}`;
+
+  if (!keys.length) {
+    list.innerHTML = emptyState('No license keys have been created yet.');
+    return;
+  }
+
+  list.innerHTML = keys.map((row) => {
+    const panel = getPanelById(row.panel_id);
+    const script = getScriptById(row.script_id);
+    const status = isExpired(row.expires_at)
+      ? badge('❌ Expired', 'danger')
+      : row.claimed_by
+        ? badge('📌 Claimed', 'warning')
+        : badge('✅ Active', 'success');
+
+    return `
+      <article class="resource-card">
+        <div class="resource-header">
+          <div>
+            <h3 class="mono-inline">${escapeHtml(row.key)}</h3>
+            <div class="resource-meta">${escapeHtml(row.note || 'No note')}</div>
+          </div>
+          <div class="badge-row">${status}</div>
+        </div>
+
+        <div class="meta-list">
+          <div class="meta-item"><strong>Script</strong><span>${escapeHtml(script?.name || row.script_id)}</span></div>
+          <div class="meta-item"><strong>Panel</strong><span>${escapeHtml(panel?.name || row.panel_id || 'None')}</span></div>
+          <div class="meta-item"><strong>Expires</strong><span>${escapeHtml(formatDate(row.expires_at))}</span></div>
+          <div class="meta-item"><strong>Claimed by</strong><span>${escapeHtml(row.claimed_tag || 'Not claimed')}</span></div>
+        </div>
+
+        <div class="action-row">
+          <button class="button secondary small" onclick='copyText(${JSON.stringify(row.key)})'>Copy</button>
+          <button class="button danger small" onclick="deleteKey('${row.key}')">✕</button>
+        </div>
+      </article>
+    `;
+  }).join('');
+}
+
+function renderHwids() {
+  const list = qs('hwidList');
+  const rows = currentData.bannedHWIDs || [];
+  qs('hwidsCount').textContent = `${rows.length} item${rows.length === 1 ? '' : 's'}`;
+
+  if (!rows.length) {
+    list.innerHTML = emptyState('No HWIDs are currently banned.');
+    return;
+  }
+
+  list.innerHTML = rows.map((row) => `
+    <article class="resource-card">
+      <div class="resource-header">
+        <div>
+          <h3 class="mono-inline">${escapeHtml(row.hwid)}</h3>
+          <div class="resource-meta">${escapeHtml(row.reason || 'No reason provided')}</div>
+        </div>
+          <div class="badge-row">${badge('🚫 Blocked', 'danger')}</div>
+      </div>
+
+      <div class="meta-list">
+        <div class="meta-item"><strong>Created</strong><span>${escapeHtml(formatDate(row.created_at))}</span></div>
+      </div>
+
+      <div class="action-row">
+        <button class="button danger small" onclick="unbanHwid('${row.hwid}')">↺ Unban</button>
+      </div>
+    </article>
+  `).join('');
+}
+
+function renderApiKeys() {
+  if (!currentUser.is_owner) return;
+  const list = qs('apiKeysList');
+  const rows = apiKeysCache || [];
+  qs('apiKeysCount').textContent = `${rows.length} item${rows.length === 1 ? '' : 's'}`;
+
+  if (!rows.length) {
+    list.innerHTML = emptyState('No API keys have been generated yet.');
+    return;
+  }
+
+  list.innerHTML = rows.map((row) => {
+    const status = !row.is_active
+      ? badge('❌ Revoked', 'danger')
+      : isExpired(row.expires_at)
+        ? badge('⏰ Expired', 'warning')
+        : badge('✅ Active', 'success');
+
+    return `
+      <article class="resource-card">
+        <div class="resource-header">
+          <div>
+            <h3 class="mono-inline">${escapeHtml(row.key)}</h3>
+            <div class="resource-meta">${escapeHtml(row.notes || 'No notes')}</div>
+          </div>
+          <div class="badge-row">${status}</div>
+        </div>
+
+        <div class="meta-list">
+          <div class="meta-item"><strong>User</strong><span>${escapeHtml(row.owner_username || row.owner_discord || row.owner_id)}</span></div>
+          <div class="meta-item"><strong>Limits</strong><span>${escapeHtml(String(row.max_scripts))} scripts / ${escapeHtml(String(row.max_panels))} panels</span></div>
+          <div class="meta-item"><strong>Expires</strong><span>${escapeHtml(formatDate(row.expires_at))}</span></div>
+          <div class="meta-item"><strong>Last used</strong><span>${escapeHtml(formatDate(row.last_used_at))}</span></div>
+        </div>
+
+        <div class="action-row">
+          <button class="button secondary small" onclick='copyText(${JSON.stringify(row.key)})'>Copy</button>
+          ${row.is_active ? `<button class="button danger small" onclick="revokeApiKey('${row.key}')">Revoke</button>` : ''}
+        </div>
+      </article>
+    `;
+  }).join('');
+}
+
+function updateSelects() {
+  const panelScriptSelect = qs('panelScriptId');
+  const keyPanelSelect = qs('keyPanelId');
+
+  if (panelScriptSelect) {
+    panelScriptSelect.innerHTML = '<option value="">Select script</option>';
+    (currentData.scripts || []).forEach((script) => {
+      panelScriptSelect.innerHTML += `<option value="${escapeHtml(script.id)}">${escapeHtml(script.name)}</option>`;
+    });
+  }
+
+  if (keyPanelSelect) {
+    keyPanelSelect.innerHTML = '<option value="">Select panel</option>';
+    (currentData.panels || []).forEach((panel) => {
+      keyPanelSelect.innerHTML += `<option value="${escapeHtml(panel.id)}">${escapeHtml(panel.name)}</option>`;
+    });
+  }
+}
+
+function renderAll() {
+  updateSummary();
+  renderScripts();
+  renderPanels();
+  renderKeys();
+  renderHwids();
+  updateSelects();
+  if (currentUser.is_owner) renderApiKeys();
+}
+
+async function loadData({ silent = false } = {}) {
+  try {
+    const data = await requestJSON('/api/data');
+    currentData = data;
+    serverTime = data.serverTime || Date.now();
+    renderAll();
+    if (!silent) {
+      // quiet on manual background refreshes
+    }
+  } catch (error) {
+    if (!silent) notify('Refresh failed', error.message || 'Unable to load dashboard data.', 'error');
+  }
+}
+
+async function loadApiKeys({ silent = true } = {}) {
+  if (!currentUser.is_owner) return;
+  try {
+    apiKeysCache = await requestJSON('/api/admin/api-keys');
+    renderApiKeys();
+  } catch (error) {
+    if (!silent) notify('API keys failed', error.message || 'Unable to load API keys.', 'error');
+  }
+}
+
+function setView(view) {
+  currentView = view;
+  document.querySelectorAll('.view').forEach((node) => {
+    node.classList.toggle('active', node.id === `view-${view}`);
+  });
+  document.querySelectorAll('.nav-link').forEach((node) => {
+    node.classList.toggle('active', node.dataset.view === view);
+  });
+  qs('pageTitle').textContent = viewTitles[view] || 'Dashboard';
+
+  if (view === 'admin') {
+    loadApiKeys({ silent: true });
+  }
+}
+
+async function submitScript() {
+  const name = qs('scriptName').value.trim();
+  const code = qs('scriptCode').value;
+  const ffaMode = qs('ffaModeCheck').checked;
+  const compressMode = qs('compressModeCheck').checked;
+
+  if (!name || !code.trim()) {
+    notify('Missing fields', 'Enter a script name and source code.', 'error');
+    return;
+  }
+
+  try {
+    const data = await requestJSON('/api/create-script', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, code, ffaMode, compressMode }),
+    });
+
+    qs('scriptName').value = '';
+    qs('scriptCode').value = '';
+    qs('ffaModeCheck').checked = false;
+    qs('compressModeCheck').checked = false;
+
+    if (compressMode) {
+      notify('Script saved', 'Script stored successfully. Obfuscation is starting now.');
+      try {
+        await obfuscateScript(data.id, true);
+      } catch {
+        // handled in obfuscateScript
+      }
+    } else {
+      notify('Script saved', 'The script has been stored successfully.');
+      await loadData({ silent: true });
+    }
+  } catch (error) {
+    notify('Save failed', error.message || 'Unable to save script.', 'error');
+  }
+}
+
+async function obfuscateScript(scriptId, silent = false) {
+  try {
+    await requestJSON('/api/obfuscate-script', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scriptId }),
+    });
+
+    await loadData({ silent: true });
+    if (!silent) notify('Obfuscation complete', 'The selected script was obfuscated successfully.');
+    if (silent) notify('Obfuscation complete', 'The new script was saved and obfuscated successfully.');
+  } catch (error) {
+    notify('Obfuscation failed', error.message || 'Unable to obfuscate the script.', 'error');
+    throw error;
+  }
+}
+
+async function toggleScript(id) {
+  try {
+    await requestJSON(`/api/scripts/${id}/toggle`, { method: 'PUT' });
+    await loadData({ silent: true });
+    notify('Script updated', 'The script status has been updated.');
+  } catch (error) {
+    notify('Update failed', error.message || 'Unable to update the script.', 'error');
+  }
+}
+
+async function toggleFfa(id) {
+  try {
+    await requestJSON(`/api/scripts/${id}/ffa`, { method: 'PUT' });
+    await loadData({ silent: true });
+    notify('Access updated', 'The script access mode has been updated.');
+  } catch (error) {
+    notify('Update failed', error.message || 'Unable to update the access mode.', 'error');
+  }
+}
+
+async function deleteScript(id) {
+  if (!window.confirm('Delete this script and all related panels and keys?')) return;
+  try {
+    await requestJSON('/api/delete-script', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    await loadData({ silent: true });
+    notify('Script deleted', 'The script and related records were removed.');
+  } catch (error) {
+    notify('Delete failed', error.message || 'Unable to delete the script.', 'error');
+  }
+}
+
+async function submitPanel() {
+  const name = qs('panelName').value.trim();
+  const description = qs('panelDescription').value.trim();
+  const channelId = qs('panelChannelId').value.trim();
+  const scriptId = qs('panelScriptId').value;
+  const hwidCooldown = Number(qs('panelHwidCooldown').value) || 180;
+
+  if (!name || !channelId || !scriptId) {
+    notify('Missing fields', 'Enter a panel name, channel ID, and script.', 'error');
+    return;
+  }
+
+  try {
+    await requestJSON('/api/create-panel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, description, channelId, scriptId, hwidCooldown }),
+    });
+
+    qs('panelName').value = '';
+    qs('panelDescription').value = '';
+    qs('panelChannelId').value = '';
+    qs('panelScriptId').value = '';
+    qs('panelHwidCooldown').value = '180';
+
+    await loadData({ silent: true });
+    notify('Panel created', 'The panel has been created successfully.');
+  } catch (error) {
+    notify('Create failed', error.message || 'Unable to create the panel.', 'error');
+  }
+}
+
+async function sendPanel(id) {
+  try {
+    await requestJSON('/api/send-panel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ panelId: id }),
+    });
+    await loadData({ silent: true });
+    notify('Panel sent', 'The panel was sent to Discord successfully.');
+  } catch (error) {
+    notify('Send failed', error.message || 'Unable to send the panel.', 'error');
+  }
+}
+
+async function deletePanel(id) {
+  if (!window.confirm('Delete this panel and its related keys?')) return;
+  try {
+    await requestJSON('/api/delete-panel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    await loadData({ silent: true });
+    notify('Panel deleted', 'The panel was removed successfully.');
+  } catch (error) {
+    notify('Delete failed', error.message || 'Unable to delete the panel.', 'error');
+  }
+}
+
+async function generateKey() {
+  const panelId = qs('keyPanelId').value;
+  const durationHours = Number(qs('keyDuration').value) || 0;
+  const note = qs('keyNote').value.trim();
+
+  if (!panelId) {
+    notify('Panel required', 'Select a panel before generating a key.', 'error');
+    return;
+  }
+
+  try {
+    const data = await requestJSON('/api/generate-key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ panelId, durationHours, note }),
+    });
+
+    qs('keyPanelId').value = '';
+    qs('keyDuration').value = '';
+    qs('keyNote').value = '';
+
+    await loadData({ silent: true });
+    notify('Key generated', `A new key was created: ${data.key}`);
+  } catch (error) {
+    notify('Generate failed', error.message || 'Unable to generate a key.', 'error');
+  }
+}
+
+async function deleteKey(key) {
+  if (!window.confirm('Delete this key?')) return;
+  try {
+    await requestJSON('/api/delete-key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key }),
+    });
+    await loadData({ silent: true });
+    notify('Key deleted', 'The license key was deleted successfully.');
+  } catch (error) {
+    notify('Delete failed', error.message || 'Unable to delete the key.', 'error');
+  }
+}
+
+async function banHwid() {
+  const hwid = qs('banHwidInput').value.trim();
+  const reason = qs('banReason').value.trim();
+
+  if (!hwid) {
+    notify('HWID required', 'Enter an HWID before saving.', 'error');
+    return;
+  }
+
+  try {
+    await requestJSON('/api/ban-hwid', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hwid, reason }),
+    });
+
+    qs('banHwidInput').value = '';
+    qs('banReason').value = '';
+
+    await loadData({ silent: true });
+    notify('HWID banned', 'The HWID has been added to the block list.');
+  } catch (error) {
+    notify('Ban failed', error.message || 'Unable to ban the HWID.', 'error');
+  }
+}
+
+async function unbanHwid(hwid) {
+  if (!window.confirm('Remove this HWID from the block list?')) return;
+  try {
+    await requestJSON('/api/unban-hwid', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hwid }),
+    });
+    await loadData({ silent: true });
+    notify('HWID unbanned', 'The HWID was removed from the block list.');
+  } catch (error) {
+    notify('Unban failed', error.message || 'Unable to unban the HWID.', 'error');
+  }
+}
+
+async function adminGenerateKey() {
+  const userId = qs('adminUserId').value.trim();
+  const expiresInDays = Number(qs('adminExpiresDays').value) || 0;
+  const notes = qs('adminNotes').value.trim();
+  const maxScripts = Number(qs('adminMaxScripts').value) || defaults.maxScripts;
+  const maxPanels = Number(qs('adminMaxPanels').value) || defaults.maxPanels;
+
+  if (!userId) {
+    notify('User required', 'Enter a user ID or Discord ID.', 'error');
+    return;
+  }
+
+  try {
+    const data = await requestJSON('/api/admin/generate-key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, expiresInDays, notes, maxScripts, maxPanels }),
+    });
+
+    qs('adminUserId').value = '';
+    qs('adminExpiresDays').value = '';
+    qs('adminNotes').value = '';
+
+    await Promise.all([loadData({ silent: true }), loadApiKeys({ silent: true })]);
+    notify('API key generated', `The new API key is ${data.apiKey}`);
+  } catch (error) {
+    notify('Generate failed', error.message || 'Unable to generate the API key.', 'error');
+  }
+}
+
+async function revokeApiKey(key) {
+  if (!window.confirm('Revoke this API key?')) return;
+  try {
+    await requestJSON('/api/admin/revoke-key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key }),
+    });
+    await loadApiKeys({ silent: true });
+    notify('API key revoked', 'The API key was revoked successfully.');
+  } catch (error) {
+    notify('Revoke failed', error.message || 'Unable to revoke the API key.', 'error');
+  }
+}
+
+window.submitScript = submitScript;
+window.obfuscateScript = obfuscateScript;
+window.toggleScript = toggleScript;
+window.toggleFfa = toggleFfa;
+window.deleteScript = deleteScript;
+window.submitPanel = submitPanel;
+window.sendPanel = sendPanel;
+window.deletePanel = deletePanel;
+window.generateKey = generateKey;
+window.deleteKey = deleteKey;
+window.banHwid = banHwid;
+window.unbanHwid = unbanHwid;
+window.adminGenerateKey = adminGenerateKey;
+window.revokeApiKey = revokeApiKey;
+
+function attachEvents() {
+  document.querySelectorAll('.nav-link[data-view]').forEach((button) => {
+    button.addEventListener('click', () => setView(button.dataset.view));
+  });
+
+  qs('refreshButton')?.addEventListener('click', async () => {
+    await loadData({ silent: false });
+    if (currentView === 'admin') await loadApiKeys({ silent: false });
+    notify('Dashboard refreshed', 'Latest data has been loaded.');
+  });
+
+  qs('saveScriptButton')?.addEventListener('click', submitScript);
+  qs('savePanelButton')?.addEventListener('click', submitPanel);
+  qs('generateKeyButton')?.addEventListener('click', generateKey);
+  qs('banHwidButton')?.addEventListener('click', banHwid);
+  qs('adminGenerateKeyButton')?.addEventListener('click', adminGenerateKey);
+}
+
+attachEvents();
+loadData({ silent: true });
+if (currentUser.is_owner) loadApiKeys({ silent: true });
+
+window.addEventListener('focus', () => {
+  loadData({ silent: true });
+  if (currentView === 'admin') loadApiKeys({ silent: true });
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) {
+    loadData({ silent: true });
+    if (currentView === 'admin') loadApiKeys({ silent: true });
+  }
+});
+
+setInterval(() => {
+  loadData({ silent: true });
+  if (currentView === 'admin') loadApiKeys({ silent: true });
+}, 20000);
+
+*/});
 
 function isExpired(isoString) {
   return Boolean(isoString) && new Date(isoString).getTime() < Date.now();
@@ -355,7 +1850,6 @@ const app = express();
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use(express.static(PUBLIC_DIR));
 
 class SQLiteSessionStore extends session.Store {
   constructor(database) {
@@ -988,7 +2482,7 @@ function pageShell({ title, body, appData = null, inlineScript = '' }) {
   <title>${escapeHtml(title)}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <style>${INLINE_APP_CSS}</style>
 </head>
 <body>
@@ -1068,26 +2562,6 @@ app.get('/dashboard', requireAuth, (req, res) => {
           <button class="nav-link" data-view="hwids">🚫 HWID Bans</button>
           ${user.is_owner ? '<button class="nav-link" data-view="admin">⚙️ Admin Panel</button>' : ''}
         </nav>
-
-        <div class="sidebar-stats">
-          <div class="sidebar-stats-title">Quick stats</div>
-          <div class="sidebar-stat-row">
-            <span class="sidebar-stat-label">Scripts</span>
-            <span class="sidebar-stat-value" id="sideStatScripts">0/0</span>
-          </div>
-          <div class="sidebar-stat-row">
-            <span class="sidebar-stat-label">Panels</span>
-            <span class="sidebar-stat-value" id="sideStatPanels">0/0</span>
-          </div>
-          <div class="sidebar-stat-row">
-            <span class="sidebar-stat-label">Keys</span>
-            <span class="sidebar-stat-value" id="sideStatKeys">0</span>
-          </div>
-          <div class="sidebar-stat-row">
-            <span class="sidebar-stat-label">HWID bans</span>
-            <span class="sidebar-stat-value" id="sideStatHwids">0</span>
-          </div>
-        </div>
 
         <div class="sidebar-footer">
           <a class="button secondary full-width" href="/logout">🚪 Logout</a>
