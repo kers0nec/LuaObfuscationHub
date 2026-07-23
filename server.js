@@ -52,7 +52,6 @@ const UPLOADS_DIR = path.join(__dirname, 'uploads');
 console.log('LuaObfuscationHub starting');
 console.log('Domain:', PUBLIC_BASE_URL);
 console.log('Owner ID:', OWNER_ID);
-console.log('Obfuscation API:', OBF_API_URL);
 
 function ensureUploadsDir() {
   if (!fs.existsSync(UPLOADS_DIR)) {
@@ -966,355 +965,1419 @@ app.get('/loader/:scriptId', (req, res) => {
   ].join('\n'));
 });
 
-function pageShell({ title, body, appData = null, scriptPath = '' }) {
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${escapeHtml(title)}</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/app.css" />
-</head>
-<body>
-  ${body}
-  ${appData ? `<script>window.__APP__ = ${safeSerialize(appData)};</script>` : ''}
-  ${scriptPath ? `<script src="${scriptPath}" defer></script>` : ''}
-</body>
-</html>`;
-}
+app.get('/app.css', (req, res) => {
+  res.type('text/css').send(`
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
-app.get('/', (req, res) => {
-  if (req.session.user) return res.redirect('/dashboard');
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0a0a0f;
+      color: #e2e8f0;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
 
-  const body = `
-    <div class="site-bg"></div>
-    <main class="auth-layout">
-      <section class="auth-card panel">
-        <div class="brand-block">
-          <div class="brand-mark">L</div>
-          <div>
-            <p class="eyebrow">LuaObfuscationHub</p>
-            <h1>LuaObfuscationHub</h1>
-            <p class="muted">Cyberpunk-grade Lua protection</p>
-          </div>
-        </div>
+    .site-bg {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(ellipse at 20% 30%, rgba(34, 195, 255, 0.04) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 70%, rgba(34, 195, 255, 0.02) 0%, transparent 50%);
+    }
 
-        <div class="stack-lg">
-          <div class="field">
-            <label for="apiKeyInput">API Key</label>
-            <input id="apiKeyInput" type="text" placeholder="Enter your API Key" autocomplete="off" />
-          </div>
+    .panel {
+      background: rgba(18, 18, 24, 0.85);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(34, 195, 255, 0.08);
+      border-radius: 12px;
+    }
 
-          <button id="apiLoginButton" class="button primary">Login with API Key</button>
+    .auth-layout {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      position: relative;
+      z-index: 1;
+    }
 
-          <div class="divider"><span>or</span></div>
+    .auth-card {
+      max-width: 440px;
+      width: 100%;
+      padding: 32px 28px;
+      box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+    }
 
-          <a class="button secondary full-width" href="/auth/discord">Login with Discord</a>
-        </div>
+    .brand-block {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 28px;
+    }
 
-        <p class="helper-text">Need an API key? Contact the owner.</p>
-      </section>
-    </main>`;
+    .brand-mark {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #22c3ff, #0891b2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 20px;
+      color: #0a0a0f;
+      flex-shrink: 0;
+    }
 
-  res.send(pageShell({ title: 'LuaObfuscationHub', body, scriptPath: '/login.js' }));
+    .brand-mark.small {
+      width: 36px;
+      height: 36px;
+      font-size: 16px;
+    }
+
+    .eyebrow {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #22c3ff;
+      font-weight: 600;
+    }
+
+    h1 {
+      font-size: 24px;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: -0.02em;
+    }
+
+    .muted {
+      color: #94a3b8;
+      font-size: 14px;
+    }
+
+    .stack-lg {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .field label {
+      font-size: 13px;
+      font-weight: 500;
+      color: #e2e8f0;
+    }
+
+    .field input,
+    .field textarea,
+    .field select {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(34, 195, 255, 0.12);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: #e2e8f0;
+      font-size: 14px;
+      font-family: inherit;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      width: 100%;
+    }
+
+    .field input:focus,
+    .field textarea:focus,
+    .field select:focus {
+      outline: none;
+      border-color: #22c3ff;
+      box-shadow: 0 0 0 3px rgba(34, 195, 255, 0.08);
+    }
+
+    .field textarea {
+      resize: vertical;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 13px;
+      min-height: 100px;
+    }
+
+    .field .mono {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 13px;
+    }
+
+    .field.checkbox-group {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding-top: 6px;
+    }
+
+    .field .check {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: #94a3b8;
+      cursor: pointer;
+    }
+
+    .field .check input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: #22c3ff;
+      cursor: pointer;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      border: none;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+      text-decoration: none;
+      font-family: inherit;
+    }
+
+    .button:active {
+      transform: scale(0.97);
+    }
+
+    .button.primary {
+      background: linear-gradient(135deg, #22c3ff, #0891b2);
+      color: #0a0a0f;
+      box-shadow: 0 4px 16px rgba(34, 195, 255, 0.2);
+    }
+
+    .button.primary:hover {
+      box-shadow: 0 6px 24px rgba(34, 195, 255, 0.3);
+      transform: translateY(-1px);
+    }
+
+    .button.secondary {
+      background: rgba(34, 195, 255, 0.08);
+      color: #22c3ff;
+      border: 1px solid rgba(34, 195, 255, 0.15);
+    }
+
+    .button.secondary:hover {
+      background: rgba(34, 195, 255, 0.14);
+    }
+
+    .button.danger {
+      background: rgba(239, 68, 68, 0.1);
+      color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.15);
+    }
+
+    .button.danger:hover {
+      background: rgba(239, 68, 68, 0.18);
+    }
+
+    .button.full-width {
+      width: 100%;
+    }
+
+    .button.obfuscate {
+      background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+      color: #fff;
+      box-shadow: 0 4px 16px rgba(139, 92, 246, 0.2);
+    }
+
+    .button.obfuscate:hover {
+      box-shadow: 0 6px 24px rgba(139, 92, 246, 0.3);
+      transform: translateY(-1px);
+    }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: #334155;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .divider::before,
+    .divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: rgba(34, 195, 255, 0.08);
+    }
+
+    .helper-text {
+      margin-top: 16px;
+      text-align: center;
+      font-size: 13px;
+      color: #475569;
+    }
+
+    .dashboard-shell {
+      display: flex;
+      min-height: 100vh;
+      position: relative;
+      z-index: 1;
+    }
+
+    .sidebar {
+      width: 260px;
+      padding: 24px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      flex-shrink: 0;
+      border-right: 1px solid rgba(34, 195, 255, 0.06);
+      border-radius: 0;
+      background: rgba(10, 10, 15, 0.95);
+      backdrop-filter: blur(20px);
+      height: 100vh;
+      position: sticky;
+      top: 0;
+      overflow-y: auto;
+    }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(34, 195, 255, 0.06);
+    }
+
+    .brand-name {
+      font-weight: 700;
+      font-size: 16px;
+      color: #fff;
+      letter-spacing: -0.01em;
+    }
+
+    .sidebar-caption {
+      font-size: 11px;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .user-summary {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 10px;
+    }
+
+    .user-summary .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: 2px solid rgba(34, 195, 255, 0.15);
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+
+    .user-name {
+      font-weight: 600;
+      font-size: 14px;
+      color: #e2e8f0;
+    }
+
+    .user-role {
+      font-size: 12px;
+      color: #475569;
+    }
+
+    .nav-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1;
+    }
+
+    .nav-link {
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: none;
+      background: transparent;
+      color: #94a3b8;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: left;
+      transition: background 0.15s, color 0.15s;
+      font-family: inherit;
+    }
+
+    .nav-link:hover {
+      background: rgba(34, 195, 255, 0.05);
+      color: #e2e8f0;
+    }
+
+    .nav-link.active {
+      background: rgba(34, 195, 255, 0.08);
+      color: #22c3ff;
+      border-left: 2px solid #22c3ff;
+    }
+
+    .sidebar-footer {
+      border-top: 1px solid rgba(34, 195, 255, 0.06);
+      padding-top: 16px;
+    }
+
+    .content-area {
+      flex: 1;
+      padding: 24px 32px 40px;
+      overflow-y: auto;
+      max-height: 100vh;
+    }
+
+    .topbar {
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .topbar h1 {
+      font-size: 22px;
+      margin: 2px 0;
+    }
+
+    .topbar .muted {
+      font-size: 13px;
+    }
+
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .live-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: #475569;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 4px 12px;
+      border-radius: 20px;
+      border: 1px solid rgba(34, 195, 255, 0.06);
+    }
+
+    .live-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #22c3ff;
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.2; }
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    .stat-card {
+      padding: 16px 20px;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #475569;
+    }
+
+    .stat-value {
+      display: block;
+      font-size: 28px;
+      font-weight: 800;
+      color: #fff;
+      margin: 4px 0;
+    }
+
+    .stat-meta {
+      font-size: 12px;
+      color: #475569;
+    }
+
+    .view {
+      display: none;
+    }
+
+    .view.active {
+      display: block;
+    }
+
+    .stack-xl {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .section-card {
+      padding: 24px;
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .section-header h2 {
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .section-header .muted {
+      font-size: 13px;
+    }
+
+    .inline-header {
+      padding: 0 4px;
+    }
+
+    .count-badge {
+      font-size: 13px;
+      color: #475569;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 4px 14px;
+      border-radius: 20px;
+      border: 1px solid rgba(34, 195, 255, 0.06);
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .form-grid .full {
+      grid-column: 1 / -1;
+    }
+
+    .form-actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+
+    .resource-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .resource-card {
+      background: rgba(18, 18, 24, 0.85);
+      border: 1px solid rgba(34, 195, 255, 0.06);
+      border-radius: 10px;
+      padding: 16px 18px;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .resource-card:hover {
+      border-color: rgba(34, 195, 255, 0.12);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    }
+
+    .resource-card .title {
+      font-weight: 600;
+      font-size: 15px;
+      color: #e2e8f0;
+      margin-bottom: 4px;
+    }
+
+    .resource-card .sub {
+      font-size: 12px;
+      color: #475569;
+      margin-bottom: 10px;
+      word-break: break-all;
+    }
+
+    .resource-card .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 12px;
+      font-size: 12px;
+      color: #475569;
+      margin-bottom: 12px;
+    }
+
+    .resource-card .meta .tag {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 2px 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(34, 195, 255, 0.06);
+    }
+
+    .resource-card .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .resource-card .actions .button {
+      font-size: 12px;
+      padding: 6px 14px;
+    }
+
+    .badge {
+      font-size: 11px;
+      padding: 2px 10px;
+      border-radius: 12px;
+      display: inline-block;
+      font-weight: 500;
+    }
+
+    .badge-active {
+      background: rgba(34, 195, 255, 0.12);
+      color: #22c3ff;
+    }
+
+    .badge-disabled {
+      background: rgba(239, 68, 68, 0.12);
+      color: #ef4444;
+    }
+
+    .badge-ffa {
+      background: rgba(251, 191, 36, 0.12);
+      color: #fbbf24;
+    }
+
+    .badge-obfuscated {
+      background: rgba(139, 92, 246, 0.12);
+      color: #8b5cf6;
+    }
+
+    .loader-box {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(34, 195, 255, 0.06);
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 11px;
+      color: #22c3ff;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      cursor: pointer;
+      margin-bottom: 10px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .loader-box:hover {
+      border-color: #22c3ff;
+      box-shadow: 0 0 20px rgba(34, 195, 255, 0.04);
+    }
+
+    .toast-root {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 999;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-width: 360px;
+      pointer-events: none;
+    }
+
+    .toast {
+      pointer-events: auto;
+      background: rgba(18, 18, 24, 0.95);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(34, 195, 255, 0.08);
+      border-radius: 10px;
+      padding: 14px 18px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+      animation: slide-in 0.25s ease-out;
+      font-size: 14px;
+      color: #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .toast.success { border-color: rgba(34, 195, 255, 0.2); }
+    .toast.error { border-color: rgba(239, 68, 68, 0.2); }
+
+    @keyframes slide-in {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 768px) {
+      .dashboard-shell {
+        flex-direction: column;
+      }
+
+      .sidebar {
+        width: 100%;
+        height: auto;
+        position: relative;
+        border-right: none;
+        border-bottom: 1px solid rgba(34, 195, 255, 0.06);
+        padding: 16px;
+      }
+
+      .content-area {
+        padding: 16px;
+        max-height: none;
+      }
+
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .stats-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .topbar {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+  `);
 });
 
-app.get('/dashboard', requireAuth, (req, res) => {
-  const user = req.session.user;
-  const body = `
-    <div class="site-bg"></div>
-    <div class="dashboard-shell">
-      <aside class="sidebar panel">
-        <div class="brand-row">
-          <div class="brand-mark small">L</div>
-          <div>
-            <div class="brand-name">LuaObfuscationHub</div>
-            <div class="sidebar-caption">Cyberpunk control panel</div>
-          </div>
-        </div>
+app.get('/login.js', (req, res) => {
+  res.type('application/javascript').send(`
+    document.addEventListener('DOMContentLoaded', () => {
+      const input = document.getElementById('apiKeyInput');
+      const button = document.getElementById('apiLoginButton');
 
-        <div class="user-summary">
-          <img src="${escapeHtml(buildAvatarUrl(user))}" alt="Avatar" class="avatar" />
-          <div>
-            <div class="user-name">${escapeHtml(user.username)}</div>
-            <div class="user-role">${user.is_owner ? '👑 Owner' : 'User'}</div>
-          </div>
-        </div>
+      async function login() {
+        const key = input.value.trim();
+        if (!key) {
+          showToast('Please enter an API key.', 'error');
+          return;
+        }
 
-        <nav class="nav-list">
-          <button class="nav-link active" data-view="scripts">📜 Scripts</button>
-          <button class="nav-link" data-view="panels">📋 Panels</button>
-          <button class="nav-link" data-view="keys">🔑 Keys</button>
-          <button class="nav-link" data-view="hwids">🚫 HWID Bans</button>
-          ${user.is_owner ? '<button class="nav-link" data-view="admin">⚙️ Admin Panel</button>' : ''}
-        </nav>
+        try {
+          button.disabled = true;
+          button.textContent = 'Logging in...';
 
-        <div class="sidebar-footer">
-          <a class="button secondary full-width" href="/logout">🚪 Logout</a>
-        </div>
-      </aside>
+          const response = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ apiKey: key }),
+          });
 
-      <main class="content-area">
-        <header class="topbar panel">
-          <div>
-            <p class="eyebrow">Dashboard</p>
-            <h1 id="pageTitle">📜 Scripts</h1>
-            <p class="muted">Manage hosting, access, keys, panels, and obfuscation.</p>
-          </div>
-          <div class="topbar-actions">
-            <button class="button secondary" id="refreshButton">Refresh</button>
-            <div class="live-pill"><span class="live-dot"></span> Live sync</div>
-          </div>
-        </header>
+          const data = await response.json();
 
-        <section class="stats-grid" id="statsGrid">
-          <article class="stat-card panel">
-            <span class="stat-label">📜 Scripts</span>
-            <strong class="stat-value" id="statScripts">0</strong>
-            <span class="stat-meta" id="statScriptsMeta">0 remaining</span>
-          </article>
-          <article class="stat-card panel">
-            <span class="stat-label">📋 Panels</span>
-            <strong class="stat-value" id="statPanels">0</strong>
-            <span class="stat-meta" id="statPanelsMeta">0 remaining</span>
-          </article>
-          <article class="stat-card panel">
-            <span class="stat-label">🔑 License Keys</span>
-            <strong class="stat-value" id="statKeys">0</strong>
-            <span class="stat-meta" id="statKeysMeta">Active inventory</span>
-          </article>
-          <article class="stat-card panel">
-            <span class="stat-label">🚫 Banned HWIDs</span>
-            <strong class="stat-value" id="statHwids">0</strong>
-            <span class="stat-meta" id="statHwidsMeta">Current blocks</span>
-          </article>
-        </section>
+          if (data.success) {
+            window.location.href = data.redirect;
+          } else {
+            showToast(data.error || 'Login failed.', 'error');
+            button.disabled = false;
+            button.textContent = 'Login with API Key';
+          }
+        } catch (error) {
+          showToast('Network error. Please try again.', 'error');
+          button.disabled = false;
+          button.textContent = 'Login with API Key';
+        }
+      }
 
-        <section id="view-scripts" class="view active stack-xl">
-          <div class="panel section-card">
-            <div class="section-header">
-              <div>
-                <h2>📜 Upload Script</h2>
-                <p class="muted">Save your Lua source and optionally obfuscate it after upload.</p>
-              </div>
-            </div>
-            <div class="form-grid two">
-              <div class="field">
-                <label for="scriptName">Script name</label>
-                <input id="scriptName" type="text" placeholder="Example: Main loader" />
-              </div>
-              <div class="field checkbox-group">
-                <label class="check"><input id="ffaModeCheck" type="checkbox" /> 🔓 FFA Mode (No key required)</label>
-                <label class="check"><input id="compressModeCheck" type="checkbox" /> 🔮 Auto-Obfuscate</label>
-              </div>
-              <div class="field full">
-                <label for="scriptCode">Source code</label>
-                <textarea id="scriptCode" rows="12" class="mono" placeholder="Paste your Lua code here"></textarea>
-              </div>
-            </div>
-            <div class="form-actions">
-              <button class="button primary" id="saveScriptButton">⚡ Host Script</button>
-            </div>
-          </div>
+      button.addEventListener('click', login);
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') login();
+      });
+    });
 
-          <div class="section-header inline-header">
-            <div>
-              <h2>Your Scripts</h2>
-              <p class="muted">Saved scripts, loaders, and access settings.</p>
-            </div>
-            <span class="count-badge" id="scriptsCount">0 items</span>
-          </div>
-          <div id="scriptsList" class="resource-grid"></div>
-        </section>
-
-        <section id="view-panels" class="view stack-xl">
-          <div class="panel section-card">
-            <div class="section-header">
-              <div>
-                <h2>📋 Create Panel</h2>
-                <p class="muted">Choose a script and send a Discord access panel to a channel.</p>
-              </div>
-            </div>
-            <div class="form-grid two">
-              <div class="field">
-                <label for="panelName">Panel name</label>
-                <input id="panelName" type="text" placeholder="Example: Main access panel" />
-              </div>
-              <div class="field">
-                <label for="panelChannelId">Discord channel ID</label>
-                <input id="panelChannelId" type="text" placeholder="123456789012345678" />
-              </div>
-              <div class="field full">
-                <label for="panelDescription">Description</label>
-                <textarea id="panelDescription" rows="4" placeholder="Optional description shown in Discord"></textarea>
-              </div>
-              <div class="field">
-                <label for="panelScriptId">Script</label>
-                <select id="panelScriptId"><option value="">Select script</option></select>
-              </div>
-              <div class="field">
-                <label for="panelHwidCooldown">HWID cooldown (seconds)</label>
-                <input id="panelHwidCooldown" type="number" value="180" min="0" />
-              </div>
-            </div>
-            <div class="form-actions">
-              <button class="button primary" id="savePanelButton">Create panel</button>
-            </div>
-          </div>
-
-          <div class="section-header inline-header">
-            <div>
-              <h2>Your panels</h2>
-              <p class="muted">Panels linked to Discord channels.</p>
-            </div>
-            <span class="count-badge" id="panelsCount">0 items</span>
-          </div>
-          <div id="panelsList" class="resource-grid"></div>
-        </section>
-
-        <section id="view-keys" class="view stack-xl">
-          <div class="panel section-card">
-            <div class="section-header">
-              <div>
-                <h2>Generate key</h2>
-                <p class="muted">Issue a license key for a panel with an optional expiration window.</p>
-              </div>
-            </div>
-            <div class="form-grid two">
-              <div class="field">
-                <label for="keyPanelId">Panel</label>
-                <select id="keyPanelId"><option value="">Select panel</option></select>
-              </div>
-              <div class="field">
-                <label for="keyDuration">Duration in hours</label>
-                <input id="keyDuration" type="number" min="0" placeholder="0 for permanent" />
-              </div>
-              <div class="field full">
-                <label for="keyNote">Note</label>
-                <input id="keyNote" type="text" placeholder="Optional note" />
-              </div>
-            </div>
-            <div class="form-actions">
-              <button class="button primary" id="generateKeyButton">Generate key</button>
-            </div>
-          </div>
-
-          <div class="section-header inline-header">
-            <div>
-              <h2>Your keys</h2>
-              <p class="muted">View status, expiration, and claim state.</p>
-            </div>
-            <span class="count-badge" id="keysCount">0 items</span>
-          </div>
-          <div id="keysList" class="resource-grid"></div>
-        </section>
-
-        <section id="view-hwids" class="view stack-xl">
-          <div class="panel section-card">
-            <div class="section-header">
-              <div>
-                <h2>Ban HWID</h2>
-                <p class="muted">Block a device identifier from using protected scripts.</p>
-              </div>
-            </div>
-            <div class="form-grid two">
-              <div class="field">
-                <label for="banHwidInput">HWID</label>
-                <input id="banHwidInput" type="text" placeholder="Paste HWID" />
-              </div>
-              <div class="field">
-                <label for="banReason">Reason</label>
-                <input id="banReason" type="text" placeholder="Optional reason" />
-              </div>
-            </div>
-            <div class="form-actions">
-              <button class="button primary" id="banHwidButton">Ban HWID</button>
-            </div>
-          </div>
-
-          <div class="section-header inline-header">
-            <div>
-              <h2>Banned HWIDs</h2>
-              <p class="muted">Review blocked identifiers.</p>
-            </div>
-            <span class="count-badge" id="hwidsCount">0 items</span>
-          </div>
-          <div id="hwidList" class="resource-grid"></div>
-        </section>
-
-        ${user.is_owner ? `
-        <section id="view-admin" class="view stack-xl">
-          <div class="panel section-card">
-            <div class="section-header">
-              <div>
-                <h2>Generate API key</h2>
-                <p class="muted">Create or update a user record and assign access limits.</p>
-              </div>
-            </div>
-            <div class="form-grid two">
-              <div class="field">
-                <label for="adminUserId">User ID or Discord ID</label>
-                <input id="adminUserId" type="text" placeholder="User ID or Discord ID" />
-              </div>
-              <div class="field">
-                <label for="adminExpiresDays">Expires in days</label>
-                <input id="adminExpiresDays" type="number" min="0" placeholder="0 for never" />
-              </div>
-              <div class="field">
-                <label for="adminMaxScripts">Max scripts</label>
-                <input id="adminMaxScripts" type="number" min="0" value="${DEFAULT_MAX_SCRIPTS}" />
-              </div>
-              <div class="field">
-                <label for="adminMaxPanels">Max panels</label>
-                <input id="adminMaxPanels" type="number" min="0" value="${DEFAULT_MAX_PANELS}" />
-              </div>
-              <div class="field full">
-                <label for="adminNotes">Notes</label>
-                <input id="adminNotes" type="text" placeholder="Optional note" />
-              </div>
-            </div>
-            <div class="form-actions">
-              <button class="button primary" id="adminGenerateKeyButton">Generate API key</button>
-            </div>
-          </div>
-
-          <div class="section-header inline-header">
-            <div>
-              <h2>API keys</h2>
-              <p class="muted">Monitor active and revoked keys.</p>
-            </div>
-            <span class="count-badge" id="apiKeysCount">0 items</span>
-          </div>
-          <div id="apiKeysList" class="resource-grid"></div>
-        </section>` : ''}
-      </main>
-    </div>
-
-    <div id="toastRoot" class="toast-root"></div>`;
-
-  res.send(
-    pageShell({
-      title: 'LuaObfuscationHub Dashboard',
-      body,
-      scriptPath: '/dashboard.js',
-      appData: {
-        user: {
-          ...user,
-          avatarUrl: buildAvatarUrl(user),
-        },
-        defaults: {
-          maxScripts: DEFAULT_MAX_SCRIPTS,
-          maxPanels: DEFAULT_MAX_PANELS,
-        },
-        baseUrl: publicBaseUrl(),
-      },
-    })
-  );
+    function showToast(message, type = 'info') {
+      const root = document.getElementById('toastRoot') || document.body;
+      const toast = document.createElement('div');
+      toast.className = 'toast ' + type;
+      toast.textContent = message;
+      root.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(8px)';
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+  `);
 });
 
+app.get('/dashboard.js', (req, res) => {
+  res.type('application/javascript').send(`
+    const APP = window.__APP__ || {};
+    const BASE_URL = APP.baseUrl || '';
+    const USER = APP.user || {};
+
+    let currentData = { scripts: [], panels: [], keys: [], bannedHWIDs: [] };
+    let serverTime = Date.now();
+    let refreshInterval = null;
+    let isRefreshing = false;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      setupNavigation();
+      setupForms();
+      loadData();
+      refreshInterval = setInterval(loadData, 15000);
+    });
+
+    function setupNavigation() {
+      document.querySelectorAll('.nav-link').forEach(link => {
+        link.addEventListener('click', () => {
+          const view = link.dataset.view;
+          switchView(view);
+        });
+      });
+
+      document.getElementById('refreshButton')?.addEventListener('click', () => {
+        loadData(true);
+      });
+    }
+
+    function switchView(view) {
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.getElementById('view-' + view)?.classList.add('active');
+
+      document.querySelectorAll('.nav-link').forEach(n => n.classList.remove('active'));
+      document.querySelector(\`.nav-link[data-view="\${view}"]\`)?.classList.add('active');
+
+      const titles = {
+        scripts: 'Scripts',
+        panels: 'Panels',
+        keys: 'License Keys',
+        hwids: 'HWID Bans',
+        admin: 'Admin Panel'
+      };
+      document.getElementById('pageTitle').textContent = titles[view] || view;
+    }
+
+    function setupForms() {
+      document.getElementById('saveScriptButton')?.addEventListener('click', submitScript);
+      document.getElementById('savePanelButton')?.addEventListener('click', submitPanel);
+      document.getElementById('generateKeyButton')?.addEventListener('click', generateKey);
+      document.getElementById('banHwidButton')?.addEventListener('click', banHwid);
+      document.getElementById('adminGenerateKeyButton')?.addEventListener('click', adminGenerateKey);
+    }
+
+    async function loadData(force = false) {
+      if (isRefreshing && !force) return;
+      isRefreshing = true;
+
+      try {
+        const response = await fetch('/api/data');
+        const data = await response.json();
+        if (data.error) return;
+
+        currentData = data;
+        serverTime = data.serverTime || Date.now();
+        renderAll();
+      } catch (error) {
+        console.error('Load error:', error);
+      } finally {
+        isRefreshing = false;
+      }
+    }
+
+    function renderAll() {
+      renderScripts();
+      renderPanels();
+      renderKeys();
+      renderHwids();
+      updateSelects();
+      updateStats();
+      if (document.getElementById('view-admin')?.classList.contains('active')) {
+        loadApiKeys();
+      }
+    }
+
+    function renderScripts() {
+      const container = document.getElementById('scriptsList');
+      const count = document.getElementById('scriptsCount');
+      const scripts = currentData.scripts || [];
+
+      count.textContent = scripts.length + ' items';
+
+      if (!scripts.length) {
+        container.innerHTML = '<div class="muted" style="padding: 40px 0; text-align: center;">No scripts yet. Upload one above.</div>';
+        return;
+      }
+
+      container.innerHTML = scripts.map(s => {
+        const isObfuscated = s.obfuscated_code && s.obfuscated_code.length > 0;
+        const baseUrl = BASE_URL;
+        const loader = s.ffa_mode
+          ? \`loadstring(game:HttpGet("\${baseUrl}/loader/\${s.id}"))()\`
+          : \`script_key = "YOUR_KEY_HERE"\\nloadstring(game:HttpGet("\${baseUrl}/loader/\${s.id}?key=" .. script_key))()\`;
+
+        const statusBadge = s.status === 'active' ? 'badge-active' : 'badge-disabled';
+        const statusText = s.status === 'active' ? 'Active' : 'Disabled';
+
+        return \`
+          <div class="resource-card">
+            <div class="title">\${escapeHtml(s.name)}</div>
+            <div class="sub">ID: \${s.id}</div>
+            <div class="meta">
+              <span class="tag badge \${statusBadge}">\${statusText}</span>
+              \${s.ffa_mode ? '<span class="tag badge badge-ffa">Open Access</span>' : '<span class="tag">Key Required</span>'}
+              \${isObfuscated ? '<span class="tag badge badge-obfuscated">Obfuscated</span>' : ''}
+            </div>
+            <div class="loader-box" onclick="copyLoader(this)" title="Click to copy loader">\${escapeHtml(loader)}</div>
+            <div class="actions">
+              <button class="button secondary" onclick="toggleScript('\${s.id}')">\${s.status === 'active' ? 'Disable' : 'Enable'}</button>
+              <button class="button secondary" onclick="toggleFfa('\${s.id}')">\${s.ffa_mode ? 'Close Access' : 'Open Access'}</button>
+              \${!isObfuscated ? '<button class="button obfuscate" onclick="obfuscateScript(\'' + s.id + '\')">Obfuscate</button>' : ''}
+              <button class="button danger" onclick="deleteScript('\${s.id}')">Delete</button>
+            </div>
+          </div>
+        \`;
+      }).join('');
+    }
+
+    function renderPanels() {
+      const container = document.getElementById('panelsList');
+      const count = document.getElementById('panelsCount');
+      const panels = currentData.panels || [];
+
+      count.textContent = panels.length + ' items';
+
+      if (!panels.length) {
+        container.innerHTML = '<div class="muted" style="padding: 40px 0; text-align: center;">No panels yet. Create one above.</div>';
+        return;
+      }
+
+      container.innerHTML = panels.map(p => \`
+        <div class="resource-card">
+          <div class="title">\${escapeHtml(p.name)}</div>
+          <div class="sub">Channel: \${p.channel_id}</div>
+          <div class="meta">
+            <span class="tag">Script: \${escapeHtml(p.script_id)}</span>
+            <span class="tag">Cooldown: \${p.hwid_cooldown}s</span>
+          </div>
+          <div class="actions">
+            <button class="button primary" onclick="sendPanel('\${p.id}')">Send to Discord</button>
+            <button class="button danger" onclick="deletePanel('\${p.id}')">Delete</button>
+          </div>
+        </div>
+      \`).join('');
+    }
+
+    function renderKeys() {
+      const container = document.getElementById('keysList');
+      const count = document.getElementById('keysCount');
+      const keys = currentData.keys || [];
+
+      count.textContent = keys.length + ' items';
+
+      if (!keys.length) {
+        container.innerHTML = '<div class="muted" style="padding: 40px 0; text-align: center;">No keys generated yet.</div>';
+        return;
+      }
+
+      container.innerHTML = keys.map(k => {
+        const expired = k.expires_at && new Date(k.expires_at).getTime() < serverTime;
+        return \`
+          <div class="resource-card">
+            <div class="title" style="font-family: monospace; font-size: 14px; color: #22c3ff;">\${escapeHtml(k.key)}</div>
+            <div class="sub">\${k.note || 'No note'}</div>
+            <div class="meta">
+              <span class="tag">\${expired ? 'Expired' : 'Active'}</span>
+              \${k.claimed_by ? '<span class="tag">Claimed</span>' : '<span class="tag">Unclaimed</span>'}
+              \${k.expires_at ? '<span class="tag">Expires: ' + new Date(k.expires_at).toLocaleDateString() + '</span>' : '<span class="tag">Permanent</span>'}
+            </div>
+            <div class="actions">
+              <button class="button danger" onclick="deleteKey('\${k.key}')">Delete</button>
+            </div>
+          </div>
+        \`;
+      }).join('');
+    }
+
+    function renderHwids() {
+      const container = document.getElementById('hwidList');
+      const count = document.getElementById('hwidsCount');
+      const hwids = currentData.bannedHWIDs || [];
+
+      count.textContent = hwids.length + ' items';
+
+      if (!hwids.length) {
+        container.innerHTML = '<div class="muted" style="padding: 40px 0; text-align: center;">No banned HWIDs.</div>';
+        return;
+      }
+
+      container.innerHTML = hwids.map(h => \`
+        <div class="resource-card">
+          <div class="title" style="font-family: monospace; font-size: 13px; color: #ef4444;">\${escapeHtml(h.hwid)}</div>
+          <div class="sub">\${h.reason || 'No reason provided'}</div>
+          <div class="actions">
+            <button class="button secondary" onclick="unbanHwid('\${h.hwid}')">Unban</button>
+          </div>
+        </div>
+      \`).join('');
+    }
+
+    function updateStats() {
+      document.getElementById('statScripts').textContent = currentData.scripts?.length || 0;
+      document.getElementById('statPanels').textContent = currentData.panels?.length || 0;
+      document.getElementById('statKeys').textContent = currentData.keys?.length || 0;
+      document.getElementById('statHwids').textContent = currentData.bannedHWIDs?.length || 0;
+
+      const limits = currentData.limits || {};
+      document.getElementById('statScriptsMeta').textContent = (limits.remainingScripts || 0) + ' remaining';
+      document.getElementById('statPanelsMeta').textContent = (limits.remainingPanels || 0) + ' remaining';
+      document.getElementById('statKeysMeta').textContent = 'Active keys';
+      document.getElementById('statHwidsMeta').textContent = 'Current blocks';
+    }
+
+    function updateSelects() {
+      const scriptSelect = document.getElementById('panelScriptId');
+      if (scriptSelect) {
+        const currentValue = scriptSelect.value;
+        scriptSelect.innerHTML = '<option value="">Select script</option>';
+        (currentData.scripts || []).forEach(s => {
+          scriptSelect.innerHTML += \`<option value="\${s.id}">\${escapeHtml(s.name)}</option>\`;
+        });
+        if (currentValue) scriptSelect.value = currentValue;
+      }
+
+      const keyPanel = document.getElementById('keyPanelId');
+      if (keyPanel) {
+        const currentValue = keyPanel.value;
+        keyPanel.innerHTML = '<option value="">Select panel</option>';
+        (currentData.panels || []).forEach(p => {
+          keyPanel.innerHTML += \`<option value="\${p.id}">\${escapeHtml(p.name)}</option>\`;
+        });
+        if (currentValue) keyPanel.value = currentValue;
+      }
+    }
+
+    async function loadApiKeys() {
+      try {
+        const response = await fetch('/api/admin/api-keys');
+        const data = await response.json();
+        const container = document.getElementById('apiKeysList');
+        const count = document.getElementById('apiKeysCount');
+
+        count.textContent = data.length + ' items';
+
+        if (!data.length) {
+          container.innerHTML = '<div class="muted" style="padding: 40px 0; text-align: center;">No API keys generated.</div>';
+          return;
+        }
+
+        container.innerHTML = data.map(k => \`
+          <div class="resource-card">
+            <div class="title" style="font-family: monospace; font-size: 13px; color: #22c3ff;">\${escapeHtml(k.key)}</div>
+            <div class="sub">User: \${k.owner_username || k.owner_discord}</div>
+            <div class="meta">
+              <span class="tag">\${k.is_active ? 'Active' : 'Revoked'}</span>
+              <span class="tag">Scripts: \${k.max_scripts || 0}</span>
+              <span class="tag">Panels: \${k.max_panels || 0}</span>
+            </div>
+            <div class="actions">
+              <button class="button danger" onclick="revokeApiKey('\${k.key}')">Revoke</button>
+            </div>
+          </div>
+        \`).join('');
+      } catch (error) {
+        console.error('Load API keys error:', error);
+      }
+    }
+
+    // ============ ACTION FUNCTIONS ============
+
+    async function submitScript() {
+      const name = document.getElementById('scriptName').value.trim();
+      const code = document.getElementById('scriptCode').value;
+      const ffaMode = document.getElementById('ffaModeCheck').checked;
+      const compressMode = document.getElementById('compressModeCheck').checked;
+
+      if (!name || !code) {
+        showToast('Please enter a name and code.', 'error');
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/create-script', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, code, ffaMode, compressMode })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+          document.getElementById('scriptName').value = '';
+          document.getElementById('scriptCode').value = '';
+          document.getElementById('ffaModeCheck').checked = false;
+          document.getElementById('compressModeCheck').checked = false;
+          showToast('Script created successfully!', 'success');
+          loadData();
+        } else {
+          showToast(data.error || 'Failed to create script.', 'error');
+        }
+      } catch (error) {
+        showToast('Network error. Please try again.', 'error');
+      }
+    }
+
+    async function obfuscateScript(scriptId) {
+      try {
+        const response = await fetch('/api/obfuscate-script', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scriptId })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+          showToast('Script obfuscated successfully!', 'success');
+          loadData();
+        } else {
+          showToast(data.error || 'Obfuscation failed.', 'error');
+        }
+      } catch (error) {
+        showToast('Network error. Please try again.', 'error');
+      }
+    }
+
+    async function toggleScript(id) {
+      try {
+        await fetch('/api/scripts/' + id + '/toggle', { method: 'PUT' });
+        loadData();
+      } catch (error) {
+        showToast('Failed to toggle script.', 'error');
+      }
+    }
+
+    async function toggleFfa(id) {
+      try {
+        await fetch('/api/scripts/' + id + '/ffa', { method: 'PUT' });
+        loadData();
+      } catch (error) {
+        showToast('Failed to toggle access mode.', 'error');
+      }
+    }
+
+    async function deleteScript(id) {
+      if (!confirm('Delete this script?')) return;
+      try {
+        await fetch('/api/delete-script', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id })
+        });
+        showToast('Script deleted.', 'success');
+        loadData();
+      } catch (error) {
+        showToast('Failed to delete script.', 'error');
+      }
+    }
+
+    async function submitPanel() {
+      const name = document.getElementById('panelName').value.trim();
+      const description = document.getElementById('panelDescription').value;
+      const channelId = document.getElementById('panelChannelId').value.trim();
+      const scriptId = document.getElementById('panelScriptId').value;
+      const hwidCooldown = parseInt(document.getElementById('panelHwidCooldown').value) || 180;
+
+      if (!name || !channelId || !scriptId) {
+        showToast('Please fill all required fields.', 'error');
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/create-panel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, description, channelId, scriptId, hwidCooldown })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+          document.getElementById('panelName').value = '';
+          document.getElementById('panelDescription').value = '';
+          document.getElementById('panelChannelId').value = '';
+          showToast('Panel created successfully!', 'success');
+          loadData();
+        } else {
+          showToast(data.error || 'Failed to create panel.', 'error');
+        }
+      } catch (error) {
+        showToast('Network error. Please try again.', 'error');
+      }
+    }
+
+    async function sendPanel(id) {
+      try {
+        const response = await fetch('/api/send-panel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ panelId: id })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+          showToast('Panel sent to Discord!', 'success');
+        } else {
+          showToast(data.error || 'Failed to send panel.', 'error');
+        }
+      } catch (error) {
+        showToast('Network error. Please try again.', 'error');
+      }
+    }
+
+    async function deletePanel(id) {
+      if (!confirm('Delete this panel?')) return;
+      try {
+        await fetch('/api/delete-panel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id })
+        });
+        showToast('Panel deleted.', 'success');
+        loadData();
+      } catch (error) {
+        showToast('Failed to delete panel.', 'error');
+      }
+    }
+
+    async function generateKey() {
+      const panelId = document.getElementById('keyPanelId').value;
+      const durationHours = parseInt(document.getElementById('keyDuration').value) || 0;
+      const note = document.getElementById('keyNote').value.trim();
+
+      if (!panelId) {
+        showToast('Please select a panel.', 'error');
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/generate-key', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ panelId, durationHours, note })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+          document.getElementById('keyNote').value = '';
+          showToast('Key generated: ' + data.key, 'success');
+          loadData();
+        } else {
+          showToast(data.error || 'Failed to generate key.', 'error');
+        }
+      } catch (error) {
+        showToast('Network error. Please try again.', 'error');
+      }
+    }
+
+    async function deleteKey(key) {
+      if (!confirm('Delete this key?')) return;
+      try {
+        await fetch('/api/delete-key', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key })
+        });
+        showToast('Key deleted.', 'success');
+        loadData();
+      } catch (error) {
+        showToast('Failed to delete key.', 'error');
+      }
+    }
+
+    async function banHwid() {
+      const hwid = document.getElementById('banHwidInput').value.trim();
+      const reason = document.getElementById('banReason').value.trim();
+
+      if (!hwid) {
+        showToast('Please enter an HWID.', 'error');
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/ban-hwid', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hwid, reason })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+          document.getElementById('banHwidInput').value = '';
+          document.getElementById('banReason').value = '';
+          showToast('HWID banned successfully!', 'success');
+          loadData();
+        } else {
+          showToast(data.error || 'Failed to ban HWID.', 'error');
+        }
+      } catch (error) {
+        showToast('Network error. Please try again.', 'error');
+      }
+    }
+
+    async function unbanHwid(hwid) {
+      if (!confirm('Unban this HWID?')) return;
+      try {
+        await fetch('/api/unban-hwid', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hwid })
+        });
+        showToast('HWID unbanned.', 'success');
+        loadData();
+      } catch (error) {
+        showToast('Failed to unban HWID.', 'error');
+      }
+    }
+
+    async function adminGenerateKey() {
+      const userId = document.getElementById('adminUserId').value.trim();
+      const expiresInDays = parseInt(document.getElementById('adminExpiresDays').value) || 0;
+      const notes = document.getElementById('adminNotes').value.trim();
+      const maxScripts = parseInt(document.getElementById('adminMaxScripts').value) || ${DEFAULT_MAX_SCRIPTS};
+      const maxPanels = parseInt(document.getElementById('adminMaxPanels').value) || ${DEFAULT_MAX_PANELS};
+
+      if (!userId) {
+        showToast('Please enter a User ID.', 'error');
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/admin/generate-key', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, expiresInDays, notes, maxScripts, maxPanels })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+          document.getElementById('adminUserId').value = '';
+          document.getElementById('adminNotes').value = '';
+          showToast('API Key generated: ' + data.apiKey, 'success');
+          loadApiKeys();
+        } else {
+          showToast(data.error || 'Failed to generate API key.', 'error');
+        }
+      } catch (error) {
+        showToast('Network error. Please try again.', 'error');
+      }
+    }
+
+    async function revokeApiKey(key) {
+      if (!confirm('Revoke this API key?')) return;
+      try {
+        await fetch('/api/admin/revoke-key', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key })
+        });
+        showToast('API key revoked.', 'success');
+        loadApiKeys();
+      } catch (error) {
+        showToast('Failed to revoke API key.', 'error');
+      }
+    }
+
+    function copyLoader(element) {
+      const text = element.textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        const originalBorder = element.style.borderColor;
+        element.style.borderColor = '#22c3ff';
+        element.style.boxShadow = '0 0 20px rgba(34, 195, 255, 0.1)';
+        setTimeout(() => {
+          element.style.borderColor = originalBorder || '';
+          element.style.boxShadow = '';
+        }, 500);
+        showToast('Loader copied to clipboard!', 'success');
+      }).catch(() => {
+        // Fallback
+        const range = document.createRange();
+        range.selectNode(element);
+        window.getSelection().removeAllRanges();
+        window.getSelection().addRange(range);
+        document.execCommand('copy');
+        showToast('Loader copied!', 'success');
+      });
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function showToast(message, type = 'info') {
+      const root = document.getElementById('toastRoot');
+      if (!root) return;
+
+      const toast = document.createElement('div');
+      toast.className = 'toast ' + type;
+      toast.textContent = message;
+      root.appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(8px)';
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    // Expose functions globally for inline onclick handlers
+    window.submitScript = submitScript;
+    window.obfuscateScript = obfuscateScript;
+    window.toggleScript = toggleScript;
+    window.toggleFfa = toggleFfa;
+    window.deleteScript = deleteScript;
+    window.submitPanel = submitPanel;
+    window.sendPanel = sendPanel;
+    window.deletePanel = deletePanel;
+    window.generateKey = generateKey;
+    window.deleteKey = deleteKey;
+    window.banHwid = banHwid;
+    window.unbanHwid = unbanHwid;
+    window.adminGenerateKey = adminGenerateKey;
+    window.revokeApiKey = revokeApiKey;
+    window.copyLoader = copyLoader;
+    window.loadData = loadData;
+  `);
+});
+
+// ============ DISCORD BOT ============
 const client = new Client({
   intents: [GatewayIntentBits.Guilds],
   partials: [Partials.Channel, Partials.Message],
