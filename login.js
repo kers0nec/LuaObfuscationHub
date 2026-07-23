@@ -29,7 +29,7 @@ async function loginWithApiKey() {
     alert(error.message || 'Login failed');
   } finally {
     button.disabled = false;
-    button.textContent = 'Sign in with API key';
+    button.textContent = 'Login with API Key';
   }
 }
 
