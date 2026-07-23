@@ -45,9 +45,6 @@ const OWNER_ID = process.env.OWNER_ID || '1207803375807373415';
 const BRAND_COLOR = 0x22c3ff;
 const DEFAULT_MAX_SCRIPTS = Number(process.env.DEFAULT_MAX_SCRIPTS || 100);
 const DEFAULT_MAX_PANELS = Number(process.env.DEFAULT_MAX_PANELS || 50);
-const DEFAULT_OBFUSCATOR = process.env.DEFAULT_OBFUSCATOR || 'kers0ne';
-const KERS_OBF_API_URL = process.env.KERS_OBF_API_URL || 'https://0ff561b9-0dc3-4ccf-9e3f-35e0705dbf7b-5173.dazl.ing/api/public/obfuscate';
-const KERS_OBF_API_KEY = process.env.KERS_OBF_API_KEY || 'kers0neontop123';
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 
 console.log('LuaObfuscationHub starting');
@@ -217,7 +214,6 @@ function createIndexIfPossible(indexSql, tableName, requiredColumn) {
 }
 
 addColumnIfMissing('scripts', 'public_id TEXT');
-addColumnIfMissing('scripts', "obfuscator TEXT DEFAULT 'kers0ne'");
 addColumnIfMissing('license_keys', 'last_hwid_reset_at TEXT');
 addColumnIfMissing('panels', 'buyer_role_id TEXT');
 addColumnIfMissing('panels', 'free_key_hours INTEGER DEFAULT 24');
@@ -244,14 +240,6 @@ function generateLicenseKey() {
   return randomString(16, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789');
 }
 
-function normalizeObfuscator() {
-  return 'kers0ne';
-}
-
-function getObfuscatorLabel() {
-  return 'Kers0ne Obfuscation';
-}
-
 function makePublicId() {
   return crypto.randomBytes(32).toString('hex');
 }
@@ -273,22 +261,7 @@ function ensureScriptPublicIds() {
   }
 }
 
-function ensureScriptObfuscators() {
-  try {
-    if (!columnExists('scripts', 'obfuscator')) {
-      console.warn('Skipping obfuscator backfill because scripts.obfuscator does not exist yet');
-      return;
-    }
-
-    db.prepare("UPDATE scripts SET obfuscator = ? WHERE obfuscator IS NULL OR TRIM(COALESCE(obfuscator, '')) = ''")
-      .run(DEFAULT_OBFUSCATOR);
-  } catch (error) {
-    console.error('obfuscator migration warning:', error.message);
-  }
-}
-
 ensureScriptPublicIds();
-ensureScriptObfuscators();
 
 function getAccessBan(discordId, userId = null) {
   if (userId) {
@@ -1455,7 +1428,6 @@ function renderScripts() {
           <div class="badge-row">
             ${badge(script.status === 'active' ? 'Active' : 'Disabled', script.status === 'active' ? 'success' : 'danger')}
             ${badge(script.ffa_mode ? 'FFA Mode' : 'Key Required', script.ffa_mode ? 'warning' : 'info')}
-            ${badge(script.obfuscated_code ? 'Obfuscated' : 'Source', script.obfuscated_code ? 'info' : 'warning')}
           </div>
         </div>
 
@@ -1463,7 +1435,7 @@ function renderScripts() {
           <div class="meta-item"><strong>Script ID</strong><span>${escapeHtml(script.id)}</span></div>
           <div class="meta-item"><strong>Hosted Path</strong><span>${escapeHtml(script.public_id || '')}</span></div>
           <div class="meta-item"><strong>Delivery</strong><span>${script.ffa_mode ? 'Direct access' : 'Key protected'}</span></div>
-          <div class="meta-item"><strong>Build</strong><span>${script.obfuscated_code ? 'Kers0ne obfuscated' : 'Raw source'}</span></div>
+          <div class="meta-item"><strong>Build</strong><span>Raw source</span></div>
         </div>
 
         <div class="code-block">
@@ -1486,7 +1458,6 @@ function renderScripts() {
           <button class="button secondary small" onclick="editScript('${script.id}')">Edit</button>
           <button class="button secondary small" onclick="toggleScript('${script.id}')">${script.status === 'active' ? 'Disable' : 'Enable'}</button>
           <button class="button secondary small" onclick="toggleFfa('${script.id}')">${script.ffa_mode ? 'Disable FFA' : 'Enable FFA'}</button>
-          <button class="button primary small" onclick="obfuscateScript('${script.id}')">Compress</button>
           <button class="button danger small" onclick="deleteScript('${script.id}')">Delete</button>
         </div>
       </article>
@@ -1541,7 +1512,6 @@ function resetScriptForm() {
   qs('scriptName').value = '';
   qs('scriptCode').value = '';
   qs('ffaModeCheck').checked = false;
-  qs('compressModeCheck').checked = true;
   qs('editorFileLabel').textContent = 'untitled.lua';
   qs('saveScriptButton').textContent = 'Save script';
   qs('cancelScriptEditButton').classList.add('hidden');
@@ -1559,7 +1529,6 @@ function editScript(id) {
   qs('scriptName').value = script.name || '';
   qs('scriptCode').value = script.code || '';
   qs('ffaModeCheck').checked = Boolean(script.ffa_mode);
-  qs('compressModeCheck').checked = Boolean(script.obfuscated_code);
   qs('editorFileLabel').textContent = `${script.name || 'script'}.lua`;
   qs('saveScriptButton').textContent = 'Update script';
   qs('cancelScriptEditButton').classList.remove('hidden');
@@ -1869,7 +1838,6 @@ async function submitScript() {
   const name = qs('scriptName').value.trim();
   const code = qs('scriptCode').value;
   const ffaMode = qs('ffaModeCheck').checked;
-  const compressMode = qs('compressModeCheck').checked;
   if (!name || !code.trim()) {
     notify('Missing fields', 'Enter a script name and source code.', 'error');
     return;
@@ -1877,40 +1845,17 @@ async function submitScript() {
 
   try {
     const isEditing = Boolean(editingScriptId);
-    const data = await requestJSON(isEditing ? `/api/scripts/${editingScriptId}` : '/api/create-script', {
+    await requestJSON(isEditing ? `/api/scripts/${editingScriptId}` : '/api/create-script', {
       method: isEditing ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, code, ffaMode, compressMode }),
+      body: JSON.stringify({ name, code, ffaMode }),
     });
 
-    const targetId = data.id || editingScriptId;
     resetScriptForm();
-
-    if (compressMode) {
-      notify(isEditing ? 'Script updated' : 'Script saved', isEditing ? 'Script updated. Kers0ne obfuscation is running now.' : 'Script saved. Kers0ne obfuscation is running now.');
-      await obfuscateScript(targetId, true);
-    } else {
-      await loadData({ silent: true });
-      notify(isEditing ? 'Script updated' : 'Script saved', isEditing ? 'The script has been updated successfully.' : 'The script has been saved successfully.');
-    }
+    await loadData({ silent: true });
+    notify(isEditing ? 'Script updated' : 'Script saved', isEditing ? 'The script has been updated successfully.' : 'The script has been saved successfully.');
   } catch (error) {
     notify('Save failed', error.message || 'Unable to save script.', 'error');
-  }
-}
-
-async function obfuscateScript(scriptId, silent = false) {
-  try {
-    await requestJSON('/api/obfuscate-script', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scriptId }),
-    });
-    await loadData({ silent: true });
-    if (!silent) notify('Kers0ne complete', 'The script was obfuscated successfully.');
-    if (silent) notify('Kers0ne complete', 'The saved script was auto-obfuscated successfully.');
-  } catch (error) {
-    notify('Obfuscation failed', error.message || 'Unable to obfuscate this script.', 'error');
-    throw error;
   }
 }
 
@@ -2298,7 +2243,6 @@ function attachEvents() {
 
 window.submitScript = submitScript;
 window.editScript = editScript;
-window.obfuscateScript = obfuscateScript;
 window.toggleScript = toggleScript;
 window.toggleFfa = toggleFfa;
 window.deleteScript = deleteScript;
@@ -2582,46 +2526,6 @@ function buildMobileViewButton(customId) {
   );
 }
 
-async function obfuscateWithKers0ne(code) {
-  ensureUploadsDir();
-  const tempFile = path.join(UPLOADS_DIR, `temp_${Date.now()}_${crypto.randomBytes(4).toString('hex')}.lua`);
-  fs.writeFileSync(tempFile, code, 'utf8');
-
-  try {
-    const form = new FormData();
-    form.append('file', fs.createReadStream(tempFile));
-    form.append('anti_env_logger', 'true');
-
-    const response = await fetch(KERS_OBF_API_URL, {
-      method: 'POST',
-      headers: {
-        'X-API-Key': KERS_OBF_API_KEY,
-        ...form.getHeaders(),
-      },
-      body: form,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(errorText || 'Kers0ne obfuscation request failed');
-    }
-
-    return await response.text();
-  } finally {
-    if (fs.existsSync(tempFile)) {
-      fs.unlinkSync(tempFile);
-    }
-  }
-}
-
-async function obfuscateScript(code) {
-  try {
-    return await obfuscateWithKers0ne(code);
-  } catch (error) {
-    console.error('Obfuscation error (kers0ne):', error);
-    throw error;
-  }
-}
 
 function authenticateApiKey(req, res, next) {
   const apiKey = req.headers['x-api-key'] || req.query.api_key || req.body.api_key;
@@ -3023,7 +2927,6 @@ app.post('/api/create-script', requireAuth, (req, res) => {
   const name = String(req.body.name || '').trim();
   const code = String(req.body.code || '');
   const ffaMode = Boolean(req.body.ffaMode);
-  const compressMode = Boolean(req.body.compressMode);
 
   if (!name || !code.trim()) {
     return res.status(400).json({ error: 'Missing name or code' });
@@ -3034,7 +2937,7 @@ app.post('/api/create-script', requireAuth, (req, res) => {
   db.prepare(
     `INSERT INTO scripts (id, user_id, name, code, obfuscated_code, public_id, obfuscator, ffa_mode, compress_mode)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(id, user.id, name, code, null, publicId, DEFAULT_OBFUSCATOR, ffaMode ? 1 : 0, compressMode ? 1 : 0);
+  ).run(id, user.id, name, code, null, publicId, 'none', ffaMode ? 1 : 0, 0);
 
   res.json({
     success: true,
@@ -3052,7 +2955,6 @@ app.put('/api/scripts/:id', requireAuth, (req, res) => {
   const name = String(req.body.name || '').trim();
   const code = String(req.body.code || '');
   const ffaMode = Boolean(req.body.ffaMode);
-  const compressMode = Boolean(req.body.compressMode);
 
   if (!name || !code.trim()) {
     return res.status(400).json({ error: 'Missing name or code' });
@@ -3062,9 +2964,9 @@ app.put('/api/scripts/:id', requireAuth, (req, res) => {
 
   db.prepare(
     `UPDATE scripts
-     SET name = ?, code = ?, obfuscated_code = NULL, ffa_mode = ?, compress_mode = ?, updated_at = CURRENT_TIMESTAMP
+     SET name = ?, code = ?, obfuscated_code = NULL, ffa_mode = ?, compress_mode = 0, updated_at = CURRENT_TIMESTAMP
      WHERE id = ?`
-  ).run(name, code, ffaMode ? 1 : 0, compressMode ? 1 : 0, id);
+  ).run(name, code, ffaMode ? 1 : 0, id);
 
   res.json({
     success: true,
@@ -3074,22 +2976,7 @@ app.put('/api/scripts/:id', requireAuth, (req, res) => {
 });
 
 app.post('/api/obfuscate-script', requireAuth, async (req, res) => {
-  const { scriptId } = req.body;
-  if (!scriptId) return res.status(400).json({ error: 'Script ID required' });
-
-  const user = req.session.user;
-  const script = db.prepare('SELECT * FROM scripts WHERE id = ? AND user_id = ?').get(scriptId, user.id);
-  if (!script) return res.status(404).json({ error: 'Script not found' });
-
-  try {
-    const obfuscatedCode = await obfuscateScript(script.code || '');
-    db.prepare(
-      'UPDATE scripts SET obfuscated_code = ?, obfuscator = ?, compress_mode = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-    ).run(obfuscatedCode, 'kers0ne', scriptId);
-    res.json({ success: true, obfuscatedCode });
-  } catch (error) {
-    res.status(500).json({ error: `Kers0ne obfuscation failed: ${error.message}` });
-  }
+  return res.status(410).json({ error: 'Obfuscation has been removed from this build.' });
 });
 
 app.post('/api/delete-script', requireAuth, (req, res) => {
@@ -3343,7 +3230,7 @@ function sendScriptContent(script, key, hwid, res) {
   if (script.status === 'disabled') return res.status(403).type('text/plain').send('-- Script disabled');
 
   if (script.ffa_mode) {
-    return res.type('text/plain').send(script.obfuscated_code || script.code || '-- Empty');
+    return res.type('text/plain').send(script.code || '-- Empty');
   }
 
   if (!key) return res.status(403).type('text/plain').send('-- Missing key');
@@ -3367,7 +3254,7 @@ function sendScriptContent(script, key, hwid, res) {
     db.prepare('UPDATE license_keys SET last_used_at = CURRENT_TIMESTAMP WHERE key = ?').run(keyRecord.key);
   }
 
-  return res.type('text/plain').send(script.obfuscated_code || script.code || '-- Empty');
+  return res.type('text/plain').send(script.code || '-- Empty');
 }
 
 function buildHostedLoaderSource(script) {
@@ -3587,7 +3474,6 @@ app.get('/dashboard', requireAuth, (req, res) => {
               </div>
               <div class="toggle-grid full">
                 <label class="switch-card"><input id="ffaModeCheck" type="checkbox" /> <span>FFA Mode (no key required)</span></label>
-                <label class="switch-card"><input id="compressModeCheck" type="checkbox" checked /> <span>Auto obfuscate with Kers0ne</span></label>
               </div>
               <div class="field full">
                 <label for="scriptCode">Script source</label>
@@ -3936,6 +3822,15 @@ async function registerCommands() {
       .setDescription('Whitelist a Discord user to a script')
       .addStringOption((option) => option.setName('script_id').setDescription('Script ID').setRequired(true))
       .addUserOption((option) => option.setName('user').setDescription('User to whitelist').setRequired(true)),
+    new SlashCommandBuilder()
+      .setName('resethwid')
+      .setDescription('Reset your linked HWID for a script')
+      .addStringOption((option) => option.setName('script_id').setDescription('Script ID').setRequired(true)),
+    new SlashCommandBuilder()
+      .setName('forceresethwid')
+      .setDescription('Force reset HWID for a whitelisted or claimed user')
+      .addStringOption((option) => option.setName('script_id').setDescription('Script ID').setRequired(true))
+      .addUserOption((option) => option.setName('user').setDescription('Discord user').setRequired(true)),
     new SlashCommandBuilder()
       .setName('banuser')
       .setDescription('Blacklist a Discord ID from logging into the website')
@@ -4352,6 +4247,47 @@ client.on('interactionCreate', async (interaction) => {
           content: `Whitelisted ${targetUser.tag} to ${script.name}.\nAssigned key: ${row.key}`,
           ephemeral: true,
         });
+      }
+
+      if (command === 'resethwid') {
+        const scriptId = interaction.options.getString('script_id', true);
+        const script = getScriptById(scriptId);
+        if (!script) return interaction.reply({ content: 'Script not found.', ephemeral: true });
+
+        const key = getLatestActiveClaimedKey(scriptId, interaction.user.id);
+        if (!key) {
+          return interaction.reply({ content: 'No active claimed key was found for your account on this script.', ephemeral: true });
+        }
+
+        const panel = db.prepare('SELECT * FROM panels WHERE script_id = ? ORDER BY created_at ASC LIMIT 1').get(scriptId);
+        if (panel?.hwid_cooldown && key.last_hwid_reset_at) {
+          const nextAllowed = new Date(key.last_hwid_reset_at).getTime() + Number(panel.hwid_cooldown) * 1000;
+          if (nextAllowed > Date.now()) {
+            const remaining = Math.ceil((nextAllowed - Date.now()) / 1000);
+            return interaction.reply({ content: `Please wait ${remaining}s before resetting HWID again.`, ephemeral: true });
+          }
+        }
+
+        db.prepare('UPDATE license_keys SET hwid = NULL, last_hwid_reset_at = CURRENT_TIMESTAMP WHERE key = ?').run(key.key);
+        return interaction.reply({ content: `HWID reset complete for ${script.name}. Re-run your loader to link the new HWID.`, ephemeral: true });
+      }
+
+      if (command === 'forceresethwid') {
+        const scriptId = interaction.options.getString('script_id', true);
+        const targetUser = interaction.options.getUser('user', true);
+        const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(interaction.user.id);
+        if (!user) return interaction.reply({ content: 'No linked dashboard account was found for this Discord user.', ephemeral: true });
+
+        const script = getScriptById(scriptId);
+        if (!script || script.user_id !== user.id) return interaction.reply({ content: 'Script not found.', ephemeral: true });
+
+        const key = getLatestActiveClaimedKey(scriptId, targetUser.id);
+        if (!key) {
+          return interaction.reply({ content: 'That user does not have an active claimed key for this script.', ephemeral: true });
+        }
+
+        db.prepare('UPDATE license_keys SET hwid = NULL, last_hwid_reset_at = CURRENT_TIMESTAMP WHERE key = ?').run(key.key);
+        return interaction.reply({ content: `Forced HWID reset for ${targetUser.tag} on ${script.name}.`, ephemeral: true });
       }
 
       if (command === 'banuser') {
