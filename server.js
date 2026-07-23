@@ -45,15 +45,9 @@ const OWNER_ID = process.env.OWNER_ID || '1207803375807373415';
 const BRAND_COLOR = 0x22c3ff;
 const DEFAULT_MAX_SCRIPTS = Number(process.env.DEFAULT_MAX_SCRIPTS || 100);
 const DEFAULT_MAX_PANELS = Number(process.env.DEFAULT_MAX_PANELS || 50);
-const DEFAULT_OBFUSCATOR = process.env.DEFAULT_OBFUSCATOR || 'hq99';
-const HQ99_OBF_API_URL = process.env.HQ99_OBF_API_URL || 'https://obf.hungquan99.site/obfuscate';
-const HQ99_OBF_API_KEY = process.env.HQ99_OBF_API_KEY || 'hq99ontop123';
-const LUAOBF_API_BASE = process.env.LUAOBF_API_BASE || 'https://api.luaobfuscator.com/v1';
-const LUAOBF_API_KEY = process.env.LUAOBF_API_KEY || '1dfc3091-b017-d5cc-f7d8-7f7e4669ae85ae50';
-const SUPPORTED_OBFUSCATORS = {
-  hq99: { id: 'hq99', label: 'HQ99 Obfuscation' },
-  luaobfuscator: { id: 'luaobfuscator', label: 'LuaObfuscator API' },
-};
+const DEFAULT_OBFUSCATOR = process.env.DEFAULT_OBFUSCATOR || 'kers0ne';
+const KERS_OBF_API_URL = process.env.KERS_OBF_API_URL || 'https://kers0ne-0bf.lovable.app/api/public/obfuscate';
+const KERS_OBF_API_KEY = process.env.KERS_OBF_API_KEY || 'kers0neontop123';
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 
 console.log('LuaObfuscationHub starting');
@@ -109,7 +103,7 @@ CREATE TABLE IF NOT EXISTS scripts (
   code TEXT,
   obfuscated_code TEXT,
   public_id TEXT UNIQUE,
-  obfuscator TEXT DEFAULT 'hq99',
+  obfuscator TEXT DEFAULT 'kers0ne',
   version TEXT DEFAULT '1.0.0',
   status TEXT DEFAULT 'active',
   ffa_mode INTEGER DEFAULT 0,
@@ -223,7 +217,7 @@ function createIndexIfPossible(indexSql, tableName, requiredColumn) {
 }
 
 addColumnIfMissing('scripts', 'public_id TEXT');
-addColumnIfMissing('scripts', "obfuscator TEXT DEFAULT 'hq99'");
+addColumnIfMissing('scripts', "obfuscator TEXT DEFAULT 'kers0ne'");
 addColumnIfMissing('license_keys', 'last_hwid_reset_at TEXT');
 addColumnIfMissing('panels', 'buyer_role_id TEXT');
 addColumnIfMissing('panels', 'free_key_hours INTEGER DEFAULT 24');
@@ -250,13 +244,12 @@ function generateLicenseKey() {
   return randomString(16, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789');
 }
 
-function normalizeObfuscator(value) {
-  const normalized = String(value || '').trim().toLowerCase();
-  return SUPPORTED_OBFUSCATORS[normalized] ? normalized : DEFAULT_OBFUSCATOR;
+function normalizeObfuscator() {
+  return 'kers0ne';
 }
 
-function getObfuscatorLabel(value) {
-  return SUPPORTED_OBFUSCATORS[normalizeObfuscator(value)]?.label || SUPPORTED_OBFUSCATORS[DEFAULT_OBFUSCATOR].label;
+function getObfuscatorLabel() {
+  return 'Kers0ne Obfuscation';
 }
 
 function makePublicId() {
@@ -1328,6 +1321,7 @@ let apiKeysCache = [];
 let serverTime = Date.now();
 let editingScriptId = null;
 let editingPanelId = null;
+let editingKeyValue = null;
 
 function qs(id) {
   return document.getElementById(id);
@@ -1469,7 +1463,7 @@ function renderScripts() {
           <div class="meta-item"><strong>Script ID</strong><span>${escapeHtml(script.id)}</span></div>
           <div class="meta-item"><strong>Hosted Path</strong><span>${escapeHtml(script.public_id || '')}</span></div>
           <div class="meta-item"><strong>Delivery</strong><span>${script.ffa_mode ? 'Direct access' : 'Key protected'}</span></div>
-          <div class="meta-item"><strong>Build</strong><span>${script.obfuscated_code ? 'HQ99 obfuscated' : 'Raw source'}</span></div>
+          <div class="meta-item"><strong>Build</strong><span>${script.obfuscated_code ? 'Kers0ne obfuscated' : 'Raw source'}</span></div>
         </div>
 
         <div class="code-block">
@@ -1630,6 +1624,41 @@ function editPanel(id) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+function resetKeyForm() {
+  editingKeyValue = null;
+  qs('keyPanelId').value = '';
+  qs('keyDuration').value = '';
+  qs('keyDiscordUserId').value = '';
+  qs('keyDiscordUserTag').value = '';
+  qs('keyNote').value = '';
+  qs('generateKeyButton').textContent = 'Generate key';
+  qs('cancelKeyEditButton').classList.add('hidden');
+}
+
+function editKey(keyValue) {
+  const row = (currentData.keys || []).find((item) => item.key === keyValue);
+  if (!row) {
+    notify('Key not found', 'Unable to load the selected key for editing.', 'error');
+    return;
+  }
+
+  editingKeyValue = keyValue;
+  qs('keyPanelId').value = row.panel_id || '';
+  if (row.expires_at) {
+    const remaining = Math.max(0, Math.ceil((new Date(row.expires_at).getTime() - serverTime) / 3600000));
+    qs('keyDuration').value = String(remaining);
+  } else {
+    qs('keyDuration').value = '0';
+  }
+  qs('keyDiscordUserId').value = row.claimed_by || '';
+  qs('keyDiscordUserTag').value = row.claimed_tag || '';
+  qs('keyNote').value = row.note || '';
+  qs('generateKeyButton').textContent = 'Update key';
+  qs('cancelKeyEditButton').classList.remove('hidden');
+  setView('keys');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
 function renderKeys() {
   const list = qs('keysList');
   const rows = currentData.keys || [];
@@ -1667,6 +1696,7 @@ function renderKeys() {
         </div>
 
         <div class="action-row">
+          <button class="button secondary small" onclick="editKey('${row.key}')">Edit</button>
           <button class="button secondary small" onclick='copyText(${JSON.stringify(row.key)})'>Copy</button>
           <button class="button danger small" onclick="deleteKey('${row.key}')">Delete</button>
         </div>
@@ -1857,7 +1887,7 @@ async function submitScript() {
     resetScriptForm();
 
     if (compressMode) {
-      notify(isEditing ? 'Script updated' : 'Script saved', isEditing ? 'Script updated. HQ99 obfuscation is running now.' : 'Script saved. HQ99 obfuscation is running now.');
+      notify(isEditing ? 'Script updated' : 'Script saved', isEditing ? 'Script updated. Kers0ne obfuscation is running now.' : 'Script saved. Kers0ne obfuscation is running now.');
       await obfuscateScript(targetId, true);
     } else {
       await loadData({ silent: true });
@@ -1876,8 +1906,8 @@ async function obfuscateScript(scriptId, silent = false) {
       body: JSON.stringify({ scriptId }),
     });
     await loadData({ silent: true });
-    if (!silent) notify('HQ99 complete', 'The script was obfuscated successfully.');
-    if (silent) notify('HQ99 complete', 'The saved script was auto-obfuscated successfully.');
+    if (!silent) notify('Kers0ne complete', 'The script was obfuscated successfully.');
+    if (silent) notify('Kers0ne complete', 'The saved script was auto-obfuscated successfully.');
   } catch (error) {
     notify('Obfuscation failed', error.message || 'Unable to obfuscate this script.', 'error');
     throw error;
@@ -1990,19 +2020,18 @@ async function generateKey() {
   }
 
   try {
-    const data = await requestJSON('/api/generate-key', {
-      method: 'POST',
+    const isEditing = Boolean(editingKeyValue);
+    const data = await requestJSON(isEditing ? `/api/keys/${encodeURIComponent(editingKeyValue)}` : '/api/generate-key', {
+      method: isEditing ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ panelId, durationHours, note, discordUserId, discordTag }),
     });
 
-    ['keyDuration', 'keyNote', 'keyDiscordUserId', 'keyDiscordUserTag'].forEach((id) => { qs(id).value = ''; });
-    qs('keyPanelId').value = '';
-
+    resetKeyForm();
     await loadData({ silent: true });
-    notify('Key generated', `New key created: ${data.key}`);
+    notify(isEditing ? 'Key updated' : 'Key generated', isEditing ? `Key ${data.key} updated successfully.` : `New key created: ${data.key}`);
   } catch (error) {
-    notify('Generate failed', error.message || 'Unable to generate a key.', 'error');
+    notify(isEditing ? 'Update failed' : 'Generate failed', error.message || 'Unable to save the key.', 'error');
   }
 }
 
@@ -2014,6 +2043,7 @@ async function deleteKey(key) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key }),
     });
+    if (editingKeyValue === key) resetKeyForm();
     await loadData({ silent: true });
     notify('Key deleted', 'The key was deleted successfully.');
   } catch (error) {
@@ -2254,6 +2284,7 @@ function attachEvents() {
   qs('savePanelButton')?.addEventListener('click', submitPanel);
   qs('cancelPanelEditButton')?.addEventListener('click', resetPanelForm);
   qs('generateKeyButton')?.addEventListener('click', generateKey);
+  qs('cancelKeyEditButton')?.addEventListener('click', resetKeyForm);
   qs('banHwidButton')?.addEventListener('click', banHwid);
   qs('adminGenerateKeyButton')?.addEventListener('click', adminGenerateKey);
   qs('adminUpdateLimitsButton')?.addEventListener('click', adminUpdateLimits);
@@ -2276,6 +2307,7 @@ window.editPanel = editPanel;
 window.sendPanel = sendPanel;
 window.deletePanel = deletePanel;
 window.generateKey = generateKey;
+window.editKey = editKey;
 window.deleteKey = deleteKey;
 window.banHwid = banHwid;
 window.unbanHwid = unbanHwid;
@@ -2544,7 +2576,13 @@ function buildPanelComponents(panel) {
   return [row1, row2, row3, row4];
 }
 
-async function obfuscateWithHq99(code) {
+function buildMobileViewButton(customId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(customId).setLabel('Mobile View').setStyle(ButtonStyle.Secondary)
+  );
+}
+
+async function obfuscateWithKers0ne(code) {
   ensureUploadsDir();
   const tempFile = path.join(UPLOADS_DIR, `temp_${Date.now()}_${crypto.randomBytes(4).toString('hex')}.lua`);
   fs.writeFileSync(tempFile, code, 'utf8');
@@ -2552,14 +2590,12 @@ async function obfuscateWithHq99(code) {
   try {
     const form = new FormData();
     form.append('file', fs.createReadStream(tempFile));
-    form.append('preset', 'Default');
-    form.append('roblox', 'true');
     form.append('anti_env_logger', 'true');
 
-    const response = await fetch(HQ99_OBF_API_URL, {
+    const response = await fetch(KERS_OBF_API_URL, {
       method: 'POST',
       headers: {
-        'X-API-Key': HQ99_OBF_API_KEY,
+        'X-API-Key': KERS_OBF_API_KEY,
         ...form.getHeaders(),
       },
       body: form,
@@ -2567,7 +2603,7 @@ async function obfuscateWithHq99(code) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(errorText || 'HQ99 obfuscation request failed');
+      throw new Error(errorText || 'Kers0ne obfuscation request failed');
     }
 
     return await response.text();
@@ -2578,66 +2614,11 @@ async function obfuscateWithHq99(code) {
   }
 }
 
-async function obfuscateWithLuaObfuscator(code) {
-  const createResponse = await fetch(`${LUAOBF_API_BASE}/obfuscator/newscript`, {
-    method: 'POST',
-    headers: {
-      apikey: LUAOBF_API_KEY,
-      'content-type': 'text/plain',
-    },
-    body: code,
-  });
-
-  let createData = {};
+async function obfuscateScript(code) {
   try {
-    createData = await createResponse.json();
-  } catch {
-    createData = {};
-  }
-
-  if (!createResponse.ok || createData.message || !createData.sessionId) {
-    throw new Error(createData.message || 'LuaObfuscator failed to create a script session');
-  }
-
-  const config = {
-    MinifiyAll: true,
-    Virtualize: true,
-  };
-
-  const obfuscateResponse = await fetch(`${LUAOBF_API_BASE}/obfuscator/obfuscate`, {
-    method: 'POST',
-    headers: {
-      apikey: LUAOBF_API_KEY,
-      sessionId: createData.sessionId,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify(config),
-  });
-
-  let obfuscateData = {};
-  try {
-    obfuscateData = await obfuscateResponse.json();
-  } catch {
-    obfuscateData = {};
-  }
-
-  if (!obfuscateResponse.ok || obfuscateData.message || !obfuscateData.code) {
-    throw new Error(obfuscateData.message || 'LuaObfuscator failed to obfuscate the uploaded script');
-  }
-
-  return obfuscateData.code;
-}
-
-async function obfuscateScript(code, provider = DEFAULT_OBFUSCATOR) {
-  const obfuscator = normalizeObfuscator(provider);
-
-  try {
-    if (obfuscator === 'luaobfuscator') {
-      return await obfuscateWithLuaObfuscator(code);
-    }
-    return await obfuscateWithHq99(code);
+    return await obfuscateWithKers0ne(code);
   } catch (error) {
-    console.error(`Obfuscation error (${obfuscator}):`, error);
+    console.error('Obfuscation error (kers0ne):', error);
     throw error;
   }
 }
@@ -3101,13 +3082,13 @@ app.post('/api/obfuscate-script', requireAuth, async (req, res) => {
   if (!script) return res.status(404).json({ error: 'Script not found' });
 
   try {
-    const obfuscatedCode = await obfuscateWithHq99(script.code || '');
+    const obfuscatedCode = await obfuscateScript(script.code || '');
     db.prepare(
-      'UPDATE scripts SET obfuscated_code = ?, compress_mode = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-    ).run(obfuscatedCode, scriptId);
+      'UPDATE scripts SET obfuscated_code = ?, obfuscator = ?, compress_mode = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+    ).run(obfuscatedCode, 'kers0ne', scriptId);
     res.json({ success: true, obfuscatedCode });
   } catch (error) {
-    res.status(500).json({ error: `HQ99 obfuscation failed: ${error.message}` });
+    res.status(500).json({ error: `Kers0ne obfuscation failed: ${error.message}` });
   }
 });
 
@@ -3274,6 +3255,35 @@ app.post('/api/generate-key', requireAuth, (req, res) => {
   });
 
   res.json({ success: true, key: row.key, expiresAt, claimedBy: row.claimed_by || null });
+});
+
+app.put('/api/keys/:key', requireAuth, (req, res) => {
+  const user = req.session.user;
+  const keyValue = String(req.params.key || '').trim();
+  const keyRecord = db.prepare('SELECT * FROM license_keys WHERE key = ? AND user_id = ?').get(keyValue, user.id);
+  if (!keyRecord) return res.status(404).json({ error: 'Key not found' });
+
+  const panelId = String(req.body.panelId || '').trim();
+  const durationHours = Number(req.body.durationHours) || 0;
+  const note = String(req.body.note || '').trim();
+  const discordUserId = String(req.body.discordUserId || '').trim();
+  const discordTag = String(req.body.discordTag || '').trim();
+  if (!panelId) return res.status(400).json({ error: 'Panel ID required' });
+
+  const panel = db.prepare('SELECT * FROM panels WHERE id = ? AND user_id = ?').get(panelId, user.id);
+  if (!panel) return res.status(404).json({ error: 'Panel not found' });
+
+  const expiresAt = durationHours > 0
+    ? new Date(Date.now() + durationHours * 3600000).toISOString()
+    : null;
+
+  db.prepare(
+    `UPDATE license_keys
+     SET script_id = ?, panel_id = ?, note = ?, expires_at = ?, claimed_by = ?, claimed_tag = ?, last_used_at = ?
+     WHERE key = ? AND user_id = ?`
+  ).run(panel.script_id, panel.id, note, expiresAt, discordUserId || null, discordTag || null, keyRecord.last_used_at || null, keyValue, user.id);
+
+  res.json({ success: true, key: keyValue, expiresAt });
 });
 
 app.post('/api/delete-key', requireAuth, (req, res) => {
@@ -3577,7 +3587,7 @@ app.get('/dashboard', requireAuth, (req, res) => {
               </div>
               <div class="toggle-grid full">
                 <label class="switch-card"><input id="ffaModeCheck" type="checkbox" /> <span>FFA Mode (no key required)</span></label>
-                <label class="switch-card"><input id="compressModeCheck" type="checkbox" checked /> <span>Auto obfuscate with HQ99</span></label>
+                <label class="switch-card"><input id="compressModeCheck" type="checkbox" checked /> <span>Auto obfuscate with Kers0ne</span></label>
               </div>
               <div class="field full">
                 <label for="scriptCode">Script source</label>
@@ -3735,6 +3745,7 @@ app.get('/dashboard', requireAuth, (req, res) => {
 
             <div class="form-actions">
               <button class="button primary" id="generateKeyButton">Generate key</button>
+              <button class="button secondary hidden" id="cancelKeyEditButton" type="button">Cancel edit</button>
             </div>
           </div>
 
@@ -4033,9 +4044,16 @@ client.on('interactionCreate', async (interaction) => {
             .addFields(
               { name: 'Access', value: script.ffa_mode ? 'Open access' : 'Key required', inline: true },
               { name: 'HWID Cooldown', value: `${panel.hwid_cooldown || 0}s`, inline: true },
-              { name: 'Hosted Loader', value: `\`\`\`lua\n${buildLoaderSnippet(script)}\n\`\`\``, inline: false }
+              { name: 'Loader Ready', value: 'Use the button below to grab the hosted mobile loadstring.', inline: false }
             );
-          return interaction.reply({ embeds: [embed], ephemeral: true });
+          return interaction.reply({ embeds: [embed], components: [buildMobileViewButton(`panelmobile_${panel.id}`)], ephemeral: true });
+        }
+
+        if (action === 'mobile') {
+          return interaction.reply({
+            content: `Mobile View\n\`\`\`lua\n${buildLoaderSnippet(script)}\n\`\`\``,
+            ephemeral: true,
+          });
         }
 
         if (action === 'redeem') {
@@ -4140,11 +4158,17 @@ client.on('interactionCreate', async (interaction) => {
           .addFields(
             { name: 'Status', value: script.status === 'active' ? 'Active' : 'Disabled', inline: true },
             { name: 'Access', value: script.ffa_mode ? 'Open access' : 'Key required', inline: true },
-            { name: 'Loader', value: buildLoaderSnippet(script), inline: false }
+            { name: 'Loader Ready', value: 'Use the button below to view the hosted loadstring.', inline: false }
           )
           .setFooter({ text: 'LuaObfuscationHub' });
 
-        return interaction.reply({ embeds: [embed], ephemeral: true });
+        return interaction.reply({ embeds: [embed], components: [buildMobileViewButton(`mobile_${script.id}`)], ephemeral: true });
+      }
+
+      if (action === 'mobile') {
+        const script = getScriptById(scriptId);
+        if (!script) return interaction.reply({ content: 'Script not found.', ephemeral: true });
+        return interaction.reply({ content: `Mobile View\n\`\`\`lua\n${buildLoaderSnippet(script)}\n\`\`\``, ephemeral: true });
       }
 
       if (action === 'redeem') {
