@@ -988,7 +988,7 @@ function pageShell({ title, body, appData = null, inlineScript = '' }) {
   <title>${escapeHtml(title)}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <style>${INLINE_APP_CSS}</style>
 </head>
 <body>
@@ -1068,6 +1068,26 @@ app.get('/dashboard', requireAuth, (req, res) => {
           <button class="nav-link" data-view="hwids">🚫 HWID Bans</button>
           ${user.is_owner ? '<button class="nav-link" data-view="admin">⚙️ Admin Panel</button>' : ''}
         </nav>
+
+        <div class="sidebar-stats">
+          <div class="sidebar-stats-title">Quick stats</div>
+          <div class="sidebar-stat-row">
+            <span class="sidebar-stat-label">Scripts</span>
+            <span class="sidebar-stat-value" id="sideStatScripts">0/0</span>
+          </div>
+          <div class="sidebar-stat-row">
+            <span class="sidebar-stat-label">Panels</span>
+            <span class="sidebar-stat-value" id="sideStatPanels">0/0</span>
+          </div>
+          <div class="sidebar-stat-row">
+            <span class="sidebar-stat-label">Keys</span>
+            <span class="sidebar-stat-value" id="sideStatKeys">0</span>
+          </div>
+          <div class="sidebar-stat-row">
+            <span class="sidebar-stat-label">HWID bans</span>
+            <span class="sidebar-stat-value" id="sideStatHwids">0</span>
+          </div>
+        </div>
 
         <div class="sidebar-footer">
           <a class="button secondary full-width" href="/logout">🚪 Logout</a>
