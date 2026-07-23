@@ -59,7 +59,6 @@ const UPLOADS_DIR = path.join(__dirname, 'uploads');
 console.log('LuaObfuscationHub starting');
 console.log('Domain:', PUBLIC_BASE_URL);
 console.log('Owner ID:', OWNER_ID);
-console.log('Obfuscators:', Object.keys(SUPPORTED_OBFUSCATORS).join(', '));
 
 function ensureUploadsDir() {
   if (!fs.existsSync(UPLOADS_DIR)) {
@@ -345,25 +344,25 @@ function textBlock(fn) {
 
 const INLINE_APP_CSS = textBlock(function () {/*
 :root {
-  --bg: #08101a;
-  --bg-alt: #0b1320;
-  --panel: rgba(11, 18, 31, 0.84);
-  --panel-strong: rgba(12, 19, 33, 0.96);
-  --panel-soft: rgba(14, 24, 40, 0.72);
-  --border: rgba(109, 185, 255, 0.14);
-  --border-strong: rgba(109, 185, 255, 0.28);
-  --text: #e6eef9;
-  --muted: #93a5c4;
-  --accent: #67d1ff;
-  --accent-strong: #3aa3ff;
+  --bg: #060b13;
+  --bg-alt: #0c1626;
+  --panel: rgba(10, 18, 32, 0.82);
+  --panel-strong: rgba(10, 18, 34, 0.96);
+  --panel-soft: rgba(16, 27, 46, 0.76);
+  --border: rgba(114, 196, 255, 0.16);
+  --border-strong: rgba(114, 196, 255, 0.32);
+  --text: #edf4ff;
+  --muted: #9bb1d3;
+  --accent: #7ad7ff;
+  --accent-strong: #4d8dff;
   --success: #4ade80;
   --warning: #fbbf24;
   --danger: #fb7185;
-  --shadow: 0 24px 70px rgba(2, 8, 18, 0.45);
-  --radius-xl: 28px;
-  --radius-lg: 22px;
-  --radius-md: 16px;
-  --radius-sm: 12px;
+  --shadow: 0 30px 90px rgba(2, 8, 18, 0.5);
+  --radius-xl: 30px;
+  --radius-lg: 24px;
+  --radius-md: 18px;
+  --radius-sm: 14px;
 }
 
 * {
@@ -381,9 +380,10 @@ body {
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: var(--text);
   background:
-    radial-gradient(circle at top left, rgba(58, 163, 255, 0.18), transparent 28%),
-    radial-gradient(circle at top right, rgba(103, 209, 255, 0.14), transparent 24%),
-    linear-gradient(180deg, #08101a 0%, #070d16 100%);
+    radial-gradient(circle at 0% 0%, rgba(77, 141, 255, 0.24), transparent 24%),
+    radial-gradient(circle at 100% 0%, rgba(122, 215, 255, 0.18), transparent 22%),
+    radial-gradient(circle at 50% 100%, rgba(53, 91, 255, 0.12), transparent 28%),
+    linear-gradient(180deg, #060b13 0%, #08111d 52%, #050a11 100%);
 }
 
 button,
@@ -403,19 +403,30 @@ a {
   inset: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
-  background-size: 44px 44px;
-  mask-image: radial-gradient(circle at center, black 60%, transparent 100%);
-  opacity: 0.5;
+    linear-gradient(rgba(255, 255, 255, 0.026) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.026) 1px, transparent 1px);
+  background-size: 46px 46px;
+  mask-image: radial-gradient(circle at center, black 62%, transparent 100%);
+  opacity: 0.52;
 }
 
 .panel {
-  background: var(--panel);
+  background: linear-gradient(180deg, rgba(13, 21, 36, 0.92), rgba(9, 16, 28, 0.88));
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
-  backdrop-filter: blur(18px);
+  backdrop-filter: blur(20px);
+  position: relative;
+  overflow: hidden;
+}
+
+.panel::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(122, 215, 255, 0.45), transparent);
+  pointer-events: none;
 }
 
 h1,
@@ -595,15 +606,15 @@ textarea {
 .button.primary {
   color: #07111b;
   font-weight: 700;
-  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
-  box-shadow: 0 16px 40px rgba(58, 163, 255, 0.28);
+  background: linear-gradient(135deg, #7ad7ff 0%, #52b8ff 42%, #4d8dff 100%);
+  box-shadow: 0 18px 40px rgba(77, 141, 255, 0.3);
 }
 
 .button.secondary,
 .button.ghost {
   color: var(--text);
-  border-color: rgba(143, 182, 235, 0.14);
-  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(143, 182, 235, 0.16);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.025));
 }
 
 .button.danger {
@@ -888,19 +899,29 @@ textarea {
 .resource-card {
   padding: 18px;
   border-radius: 22px;
-  border: 1px solid rgba(143, 182, 235, 0.1);
-  background: var(--panel-strong);
+  border: 1px solid rgba(143, 182, 235, 0.12);
+  background: linear-gradient(180deg, rgba(14, 23, 39, 0.96), rgba(10, 17, 29, 0.92));
   box-shadow: var(--shadow);
   display: grid;
   gap: 16px;
   transform: translateY(0);
-  transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
+  transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease, background 0.22s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.resource-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at top right, rgba(122, 215, 255, 0.1), transparent 30%);
+  pointer-events: none;
 }
 
 .resource-card:hover {
-  transform: translateY(-2px);
-  border-color: rgba(103, 209, 255, 0.22);
-  box-shadow: 0 26px 80px rgba(2, 8, 18, 0.5);
+  transform: translateY(-3px);
+  border-color: rgba(103, 209, 255, 0.24);
+  box-shadow: 0 32px 90px rgba(2, 8, 18, 0.54);
 }
 
 .resource-header {
@@ -927,10 +948,11 @@ textarea {
 .badge.danger { background: rgba(251, 113, 133, 0.14); color: #ffdbe2; }
 
 .code-block {
-  background: rgba(6, 12, 21, 0.92);
+  background: linear-gradient(180deg, rgba(6, 12, 21, 0.98), rgba(8, 14, 26, 0.94));
   border: 1px solid rgba(143, 182, 235, 0.1);
   border-radius: 18px;
   overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .code-actions {
@@ -997,7 +1019,8 @@ textarea {
   border-radius: 22px;
   overflow: hidden;
   border: 1px solid rgba(143, 182, 235, 0.12);
-  background: rgba(5, 11, 20, 0.96);
+  background: linear-gradient(180deg, rgba(6, 12, 22, 0.98), rgba(7, 14, 26, 0.94));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .editor-lines {
@@ -1266,7 +1289,7 @@ document.getElementById('apiKeyInput')?.addEventListener('keydown', (event) => {
 const INLINE_DASHBOARD_JS = textBlock(function () {/*
 const APP = window.__APP__ || {};
 const currentUser = APP.user || {};
-const defaults = APP.defaults || { maxScripts: 100, maxPanels: 50, defaultObfuscator: 'hq99' };
+const defaults = APP.defaults || { maxScripts: 100, maxPanels: 50 };
 const baseUrl = APP.baseUrl || window.location.origin;
 
 const viewTitles = {
@@ -1278,7 +1301,7 @@ const viewTitles = {
 };
 
 const viewDescriptions = {
-  scripts: 'Manage hosted scripts, loadstrings, compression, and upload flow.',
+  scripts: 'Manage hosted scripts, loadstrings, FFA mode, and upload flow.'
   panels: 'Create polished Discord panels and role-enabled access buttons.',
   keys: 'Generate, assign, copy, and revoke access keys.',
   hwids: 'Manage blocked hardware identifiers and enforcement.',
@@ -1367,23 +1390,6 @@ async function requestJSON(url, options = {}) {
   return data;
 }
 
-function normalizeObfuscatorClient(value) {
-  const normalized = String(value || '').trim().toLowerCase();
-  return ['hq99', 'luaobfuscator'].includes(normalized) ? normalized : (defaults.defaultObfuscator || 'hq99');
-}
-
-function obfuscatorLabel(value) {
-  return normalizeObfuscatorClient(value) === 'luaobfuscator' ? 'LuaObfuscator API' : 'HQ99 Obfuscation';
-}
-
-function obfuscatorOptions(selectedValue) {
-  const selected = normalizeObfuscatorClient(selectedValue);
-  return [
-    { value: 'hq99', label: 'HQ99 Obfuscation' },
-    { value: 'luaobfuscator', label: 'LuaObfuscator API' },
-  ].map((option) => `<option value="${option.value}" ${option.value === selected ? 'selected' : ''}>${option.label}</option>`).join('');
-}
-
 function hostedLoader(script) {
   const url = `${baseUrl}/scripts/hosted/${script.public_id}.lua`;
   return script.ffa_mode
@@ -1454,23 +1460,14 @@ function renderScripts() {
           </div>
           <div class="badge-row">
             ${badge(script.status === 'active' ? 'Active' : 'Disabled', script.status === 'active' ? 'success' : 'danger')}
-            ${badge(script.ffa_mode ? 'Open Access' : 'Key Required', script.ffa_mode ? 'warning' : 'info')}
-            ${badge(script.compress_mode ? 'Compressed' : 'Source', script.compress_mode ? 'info' : 'warning')}
-            ${badge(normalizeObfuscatorClient(script.obfuscator) === 'luaobfuscator' ? 'LuaObfuscator' : 'HQ99', 'info')}
+            ${badge(script.ffa_mode ? 'FFA Mode' : 'Key Required', script.ffa_mode ? 'warning' : 'info')}
           </div>
         </div>
 
         <div class="meta-list">
           <div class="meta-item"><strong>Script ID</strong><span>${escapeHtml(script.id)}</span></div>
           <div class="meta-item"><strong>Hosted Path</strong><span>${escapeHtml(script.public_id || '')}</span></div>
-          <div class="meta-item"><strong>Obfuscator</strong><span>${escapeHtml(obfuscatorLabel(script.obfuscator))}</span></div>
-        </div>
-
-        <div class="field">
-          <label for="obf-${script.id}">Obfuscator</label>
-          <select id="obf-${script.id}" onchange="setScriptObfuscator('${script.id}', this.value)">
-            ${obfuscatorOptions(script.obfuscator)}
-          </select>
+          <div class="meta-item"><strong>Delivery</strong><span>${script.ffa_mode ? 'Direct access' : 'Key protected'}</span></div>
         </div>
 
         <div class="code-block">
@@ -1492,8 +1489,7 @@ function renderScripts() {
         <div class="action-row">
           <button class="button secondary small" onclick="editScript('${script.id}')">Edit</button>
           <button class="button secondary small" onclick="toggleScript('${script.id}')">${script.status === 'active' ? 'Disable' : 'Enable'}</button>
-          <button class="button secondary small" onclick="toggleFfa('${script.id}')">${script.ffa_mode ? 'Disable Open Access' : 'Enable Open Access'}</button>
-          ${script.compress_mode ? '' : `<button class="button primary small" onclick="obfuscateScript('${script.id}')">Compress</button>`}
+          <button class="button secondary small" onclick="toggleFfa('${script.id}')">${script.ffa_mode ? 'Disable FFA' : 'Enable FFA'}</button>
           <button class="button danger small" onclick="deleteScript('${script.id}')">Delete</button>
         </div>
       </article>
@@ -1547,9 +1543,7 @@ function resetScriptForm() {
   editingScriptId = null;
   qs('scriptName').value = '';
   qs('scriptCode').value = '';
-  qs('scriptObfuscator').value = defaults.defaultObfuscator || 'hq99';
   qs('ffaModeCheck').checked = false;
-  qs('compressModeCheck').checked = false;
   qs('editorFileLabel').textContent = 'untitled.lua';
   qs('saveScriptButton').textContent = 'Save script';
   qs('cancelScriptEditButton').classList.add('hidden');
@@ -1566,9 +1560,7 @@ function editScript(id) {
   editingScriptId = id;
   qs('scriptName').value = script.name || '';
   qs('scriptCode').value = script.code || '';
-  qs('scriptObfuscator').value = normalizeObfuscatorClient(script.obfuscator);
   qs('ffaModeCheck').checked = Boolean(script.ffa_mode);
-  qs('compressModeCheck').checked = Boolean(script.compress_mode);
   qs('editorFileLabel').textContent = `${script.name || 'script'}.lua`;
   qs('saveScriptButton').textContent = 'Update script';
   qs('cancelScriptEditButton').classList.remove('hidden');
@@ -1842,8 +1834,6 @@ async function submitScript() {
   const name = qs('scriptName').value.trim();
   const code = qs('scriptCode').value;
   const ffaMode = qs('ffaModeCheck').checked;
-  const compressMode = qs('compressModeCheck').checked;
-  const obfuscator = normalizeObfuscatorClient(qs('scriptObfuscator').value);
   if (!name || !code.trim()) {
     notify('Missing fields', 'Enter a script name and source code.', 'error');
     return;
@@ -1851,55 +1841,17 @@ async function submitScript() {
 
   try {
     const isEditing = Boolean(editingScriptId);
-    const data = await requestJSON(isEditing ? `/api/scripts/${editingScriptId}` : '/api/create-script', {
+    await requestJSON(isEditing ? `/api/scripts/${editingScriptId}` : '/api/create-script', {
       method: isEditing ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, code, ffaMode, compressMode, obfuscator }),
+      body: JSON.stringify({ name, code, ffaMode }),
     });
 
-    const targetId = data.id || editingScriptId;
     resetScriptForm();
-
-    if (compressMode) {
-      notify(isEditing ? 'Script updated' : 'Script saved', isEditing ? 'Script updated successfully. Compression is now running.' : 'Script saved successfully. Compression is now running.');
-      await obfuscateScript(targetId, true);
-    } else {
-      await loadData({ silent: true });
-      notify(isEditing ? 'Script updated' : 'Script saved', isEditing ? 'The script has been updated successfully.' : 'The script has been saved successfully.');
-    }
+    await loadData({ silent: true });
+    notify(isEditing ? 'Script updated' : 'Script saved', isEditing ? 'The script has been updated successfully.' : 'The script has been saved successfully.');
   } catch (error) {
     notify('Save failed', error.message || 'Unable to save script.', 'error');
-  }
-}
-
-async function obfuscateScript(scriptId, silent = false) {
-  const select = qs(`obf-${scriptId}`);
-  const obfuscator = select ? normalizeObfuscatorClient(select.value) : undefined;
-  try {
-    await requestJSON('/api/obfuscate-script', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scriptId, obfuscator }),
-    });
-    await loadData({ silent: true });
-    notify('Compression complete', silent ? 'The saved script was compressed successfully.' : 'Script compressed successfully.');
-  } catch (error) {
-    notify('Compression failed', error.message || 'Unable to compress the script.', 'error');
-    throw error;
-  }
-}
-
-async function setScriptObfuscator(scriptId, obfuscator) {
-  try {
-    await requestJSON(`/api/scripts/${scriptId}/obfuscator`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ obfuscator }),
-    });
-    await loadData({ silent: true });
-    notify('Obfuscator updated', `Saved ${obfuscatorLabel(obfuscator)} for this script.`);
-  } catch (error) {
-    notify('Update failed', error.message || 'Unable to update the obfuscator.', 'error');
   }
 }
 
@@ -2286,8 +2238,6 @@ function attachEvents() {
 
 window.submitScript = submitScript;
 window.editScript = editScript;
-window.obfuscateScript = obfuscateScript;
-window.setScriptObfuscator = setScriptObfuscator;
 window.toggleScript = toggleScript;
 window.toggleFfa = toggleFfa;
 window.deleteScript = deleteScript;
@@ -2448,11 +2398,6 @@ function buildRawScriptUrl(publicId) {
 function buildLoaderSnippet(script) {
   if (!script.public_id) {
     db.prepare('UPDATE scripts SET public_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(makePublicId(), script.id);
-    script = getScriptById(script.id);
-  }
-
-  if (!script.obfuscator) {
-    db.prepare('UPDATE scripts SET obfuscator = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(DEFAULT_OBFUSCATOR, script.id);
     script = getScriptById(script.id);
   }
 
@@ -3066,9 +3011,7 @@ app.post('/api/create-script', requireAuth, (req, res) => {
 
   const name = String(req.body.name || '').trim();
   const code = String(req.body.code || '');
-  const compressMode = Boolean(req.body.compressMode);
   const ffaMode = Boolean(req.body.ffaMode);
-  const obfuscator = normalizeObfuscator(req.body.obfuscator);
 
   if (!name || !code.trim()) {
     return res.status(400).json({ error: 'Missing name or code' });
@@ -3079,7 +3022,7 @@ app.post('/api/create-script', requireAuth, (req, res) => {
   db.prepare(
     `INSERT INTO scripts (id, user_id, name, code, obfuscated_code, public_id, obfuscator, ffa_mode, compress_mode)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(id, user.id, name, code, null, publicId, obfuscator, ffaMode ? 1 : 0, compressMode ? 1 : 0);
+  ).run(id, user.id, name, code, null, publicId, DEFAULT_OBFUSCATOR, ffaMode ? 1 : 0, 0);
 
   res.json({
     success: true,
@@ -3096,61 +3039,29 @@ app.put('/api/scripts/:id', requireAuth, (req, res) => {
 
   const name = String(req.body.name || '').trim();
   const code = String(req.body.code || '');
-  const compressMode = Boolean(req.body.compressMode);
   const ffaMode = Boolean(req.body.ffaMode);
-  const obfuscator = normalizeObfuscator(req.body.obfuscator || script.obfuscator);
 
   if (!name || !code.trim()) {
     return res.status(400).json({ error: 'Missing name or code' });
   }
 
   const codeChanged = code !== (script.code || '');
-  const obfuscatorChanged = obfuscator !== normalizeObfuscator(script.obfuscator);
-  const nextObfuscatedCode = (codeChanged || obfuscatorChanged) ? null : script.obfuscated_code;
 
   db.prepare(
     `UPDATE scripts
-     SET name = ?, code = ?, obfuscated_code = ?, obfuscator = ?, ffa_mode = ?, compress_mode = ?, updated_at = CURRENT_TIMESTAMP
+     SET name = ?, code = ?, obfuscated_code = NULL, ffa_mode = ?, compress_mode = 0, updated_at = CURRENT_TIMESTAMP
      WHERE id = ?`
-  ).run(name, code, nextObfuscatedCode, obfuscator, ffaMode ? 1 : 0, compressMode ? 1 : 0, id);
+  ).run(name, code, ffaMode ? 1 : 0, id);
 
   res.json({
     success: true,
     id,
     codeChanged,
-    obfuscatorChanged,
   });
 });
 
 app.post('/api/obfuscate-script', requireAuth, async (req, res) => {
-  const { scriptId } = req.body;
-  if (!scriptId) return res.status(400).json({ error: 'Script ID required' });
-
-  const user = req.session.user;
-  const script = db.prepare('SELECT * FROM scripts WHERE id = ? AND user_id = ?').get(scriptId, user.id);
-  if (!script) return res.status(404).json({ error: 'Script not found' });
-
-  const obfuscator = normalizeObfuscator(req.body.obfuscator || script.obfuscator);
-
-  try {
-    const obfuscatedCode = await obfuscateScript(script.code || '', obfuscator);
-    db.prepare(
-      'UPDATE scripts SET obfuscated_code = ?, obfuscator = ?, compress_mode = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-    ).run(obfuscatedCode, obfuscator, scriptId);
-    res.json({ success: true, obfuscatedCode, obfuscator });
-  } catch (error) {
-    res.status(500).json({ error: `Obfuscation failed: ${error.message}` });
-  }
-});
-
-app.put('/api/scripts/:id/obfuscator', requireAuth, (req, res) => {
-  const { id } = req.params;
-  const script = db.prepare('SELECT * FROM scripts WHERE id = ? AND user_id = ?').get(id, req.session.user.id);
-  if (!script) return res.status(404).json({ error: 'Script not found' });
-
-  const obfuscator = normalizeObfuscator(req.body.obfuscator);
-  db.prepare('UPDATE scripts SET obfuscator = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(obfuscator, id);
-  res.json({ success: true, obfuscator });
+  return res.status(410).json({ error: 'Obfuscation has been removed from this build.' });
 });
 
 app.post('/api/delete-script', requireAuth, (req, res) => {
@@ -3375,7 +3286,7 @@ function sendScriptContent(script, key, hwid, res) {
   if (script.status === 'disabled') return res.status(403).type('text/plain').send('-- Script disabled');
 
   if (script.ffa_mode) {
-    return res.type('text/plain').send(script.obfuscated_code || script.code || '-- Empty');
+    return res.type('text/plain').send(script.code || '-- Empty');
   }
 
   if (!key) return res.status(403).type('text/plain').send('-- Missing key');
@@ -3399,7 +3310,7 @@ function sendScriptContent(script, key, hwid, res) {
     db.prepare('UPDATE license_keys SET last_used_at = CURRENT_TIMESTAMP WHERE key = ?').run(keyRecord.key);
   }
 
-  return res.type('text/plain').send(script.obfuscated_code || script.code || '-- Empty');
+  return res.type('text/plain').send(script.code || '-- Empty');
 }
 
 function buildHostedLoaderSource(script) {
@@ -3483,7 +3394,7 @@ app.get('/', (req, res) => {
           <div>
             <p class="eyebrow">LuaObfuscationHub</p>
             <h1 class="hero-title">Modern script hosting with a cleaner workflow</h1>
-            <p class="hero-subtitle">Manage scripts, panels, buyer roles, loadstrings, HWID access, and compression from a single dashboard.</p>
+            <p class="hero-subtitle">Manage scripts, panels, buyer roles, loadstrings, HWID access, and website controls from a single dashboard.</p>
           </div>
         </div>
 
@@ -3504,7 +3415,7 @@ app.get('/', (req, res) => {
             <div class="feature-list">
               <div class="feature-item">
                 <div class="feature-title">Hosted loader paths</div>
-                <div class="helper-text">Key-based loadstrings with hosted file paths and compression support.</div>
+                <div class="helper-text">Key-based loadstrings with hosted file paths and working FFA mode support.</div>
               </div>
               <div class="feature-item">
                 <div class="feature-title">Discord access panels</div>
@@ -3571,7 +3482,7 @@ app.get('/dashboard', requireAuth, (req, res) => {
           <div class="stack">
             <p class="eyebrow">Dashboard</p>
             <h1 class="page-title" id="pageTitle">Scripts</h1>
-            <p class="muted" id="pageSubtitle">Manage hosted scripts, loadstrings, compression, and upload flow.</p>
+            <p class="muted" id="pageSubtitle">Manage hosted scripts, loadstrings, FFA mode, and upload flow.</p>
           </div>
           <div class="topbar-actions">
             <button class="button secondary" id="refreshButton">Refresh</button>
@@ -3607,26 +3518,18 @@ app.get('/dashboard', requireAuth, (req, res) => {
             <div class="section-header">
               <div>
                 <h2>Script workspace</h2>
-                <p class="muted">Paste code, upload a file, and host a new script with compression support.</p>
+                <p class="muted">Paste code, upload a file, edit existing scripts, and switch FFA mode whenever you need.</p>
               </div>
               <span class="count-badge" id="scriptsCount">0 items</span>
             </div>
 
             <div class="form-grid two">
-              <div class="field">
+              <div class="field full">
                 <label for="scriptName">Script name</label>
                 <input id="scriptName" type="text" placeholder="Main loader" />
               </div>
-              <div class="field">
-                <label for="scriptObfuscator">Obfuscator</label>
-                <select id="scriptObfuscator">
-                  <option value="hq99" ${DEFAULT_OBFUSCATOR === 'hq99' ? 'selected' : ''}>HQ99 Obfuscation</option>
-                  <option value="luaobfuscator" ${DEFAULT_OBFUSCATOR === 'luaobfuscator' ? 'selected' : ''}>LuaObfuscator API</option>
-                </select>
-              </div>
               <div class="toggle-grid full">
-                <label class="switch-card"><input id="ffaModeCheck" type="checkbox" /> <span>Open access mode</span></label>
-                <label class="switch-card"><input id="compressModeCheck" type="checkbox" /> <span>Compress on save</span></label>
+                <label class="switch-card"><input id="ffaModeCheck" type="checkbox" /> <span>FFA Mode (no key required)</span></label>
               </div>
               <div class="field full">
                 <label for="scriptCode">Script source</label>
@@ -3928,7 +3831,6 @@ app.get('/dashboard', requireAuth, (req, res) => {
         defaults: {
           maxScripts: DEFAULT_MAX_SCRIPTS,
           maxPanels: DEFAULT_MAX_PANELS,
-          defaultObfuscator: DEFAULT_OBFUSCATOR,
         },
         baseUrl: publicBaseUrl(),
       },
@@ -4082,7 +3984,7 @@ client.on('interactionCreate', async (interaction) => {
           const embed = buildPanelEmbed(panel, script)
             .addFields(
               { name: 'Access', value: script.ffa_mode ? 'Open access' : 'Key required', inline: true },
-              { name: 'Compression', value: script.compress_mode ? 'Enabled' : 'Disabled', inline: true },
+              { name: 'HWID Cooldown', value: `${panel.hwid_cooldown || 0}s`, inline: true },
               { name: 'Hosted Loader', value: `\`\`\`lua\n${buildLoaderSnippet(script)}\n\`\`\``, inline: false }
             );
           return interaction.reply({ embeds: [embed], ephemeral: true });
@@ -4190,7 +4092,7 @@ client.on('interactionCreate', async (interaction) => {
           .addFields(
             { name: 'Status', value: script.status === 'active' ? 'Active' : 'Disabled', inline: true },
             { name: 'Access', value: script.ffa_mode ? 'Open access' : 'Key required', inline: true },
-            { name: 'Compression', value: script.compress_mode ? 'Enabled' : 'Disabled', inline: true }
+            { name: 'Loader', value: buildLoaderSnippet(script), inline: false }
           )
           .setFooter({ text: 'LuaObfuscationHub' });
 
