@@ -46,7 +46,7 @@ const BRAND_COLOR = 0x22c3ff;
 const DEFAULT_MAX_SCRIPTS = Number(process.env.DEFAULT_MAX_SCRIPTS || 100);
 const DEFAULT_MAX_PANELS = Number(process.env.DEFAULT_MAX_PANELS || 50);
 const DEFAULT_OBFUSCATOR = process.env.DEFAULT_OBFUSCATOR || 'kers0ne';
-const KERS_OBF_API_URL = process.env.KERS_OBF_API_URL || 'http://localhost:8080/api/public/obfuscate';
+const KERS_OBF_API_URL = process.env.KERS_OBF_API_URL || 'https://0ff561b9-0dc3-4ccf-9e3f-35e0705dbf7b-5173.dazl.ing/api/public/obfuscate';
 const KERS_OBF_API_KEY = process.env.KERS_OBF_API_KEY || 'kers0neontop123';
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 
