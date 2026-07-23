@@ -46,7 +46,7 @@ const BRAND_COLOR = 0x22c3ff;
 const DEFAULT_MAX_SCRIPTS = Number(process.env.DEFAULT_MAX_SCRIPTS || 100);
 const DEFAULT_MAX_PANELS = Number(process.env.DEFAULT_MAX_PANELS || 50);
 const DEFAULT_OBFUSCATOR = process.env.DEFAULT_OBFUSCATOR || 'kers0ne';
-const KERS_OBF_API_URL = process.env.KERS_OBF_API_URL || 'https://kers0ne-0bf.lovable.app/api/public/obfuscate';
+const KERS_OBF_API_URL = process.env.KERS_OBF_API_URL || 'https://3000-ie6do3dhmxmztam9zf4o5-168364b5.us2.manus.computer/api/public/obfuscate';
 const KERS_OBF_API_KEY = process.env.KERS_OBF_API_KEY || 'kers0neontop123';
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 
