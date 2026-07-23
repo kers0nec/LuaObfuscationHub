@@ -102,6 +102,7 @@ CREATE TABLE IF NOT EXISTS scripts (
   name TEXT NOT NULL,
   code TEXT,
   obfuscated_code TEXT,
+  public_id TEXT UNIQUE,
   version TEXT DEFAULT '1.0.0',
   status TEXT DEFAULT 'active',
   ffa_mode INTEGER DEFAULT 0,
@@ -122,6 +123,7 @@ CREATE TABLE IF NOT EXISTS license_keys (
   expires_at TEXT,
   claimed_by TEXT,
   claimed_tag TEXT,
+  last_hwid_reset_at TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   last_used_at TEXT,
   FOREIGN KEY(script_id) REFERENCES scripts(id),
@@ -142,10 +144,35 @@ CREATE TABLE IF NOT EXISTS panels (
   description TEXT,
   channel_id TEXT NOT NULL,
   script_id TEXT NOT NULL,
+  buyer_role_id TEXT,
+  free_key_hours INTEGER DEFAULT 24,
   hwid_cooldown INTEGER DEFAULT 180,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY(user_id) REFERENCES users(id),
   FOREIGN KEY(script_id) REFERENCES scripts(id)
+);
+
+CREATE TABLE IF NOT EXISTS script_whitelist (
+  id TEXT PRIMARY KEY,
+  script_id TEXT NOT NULL,
+  owner_user_id TEXT NOT NULL,
+  discord_user_id TEXT NOT NULL,
+  discord_tag TEXT,
+  granted_key TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(script_id) REFERENCES scripts(id),
+  FOREIGN KEY(owner_user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS access_bans (
+  id TEXT PRIMARY KEY,
+  discord_id TEXT UNIQUE,
+  user_id TEXT,
+  reason TEXT,
+  banned_by TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(user_id) REFERENCES users(id),
+  FOREIGN KEY(banned_by) REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -160,8 +187,29 @@ CREATE INDEX IF NOT EXISTS idx_license_keys_key ON license_keys(key);
 CREATE INDEX IF NOT EXISTS idx_license_keys_script_id ON license_keys(script_id);
 CREATE INDEX IF NOT EXISTS idx_license_keys_user_id ON license_keys(user_id);
 CREATE INDEX IF NOT EXISTS idx_scripts_user_id ON scripts(user_id);
+CREATE INDEX IF NOT EXISTS idx_scripts_public_id ON scripts(public_id);
 CREATE INDEX IF NOT EXISTS idx_panels_user_id ON panels(user_id);
+CREATE INDEX IF NOT EXISTS idx_whitelist_script_user ON script_whitelist(script_id, discord_user_id);
+CREATE INDEX IF NOT EXISTS idx_access_bans_discord_id ON access_bans(discord_id);
+CREATE INDEX IF NOT EXISTS idx_access_bans_user_id ON access_bans(user_id);
 `);
+
+function columnExists(tableName, columnName) {
+  const columns = db.prepare(`PRAGMA table_info(${tableName})`).all();
+  return columns.some((column) => column.name === columnName);
+}
+
+function addColumnIfMissing(tableName, columnDefinition) {
+  const [columnName] = columnDefinition.trim().split(/\s+/);
+  if (!columnExists(tableName, columnName)) {
+    db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnDefinition}`);
+  }
+}
+
+addColumnIfMissing('scripts', 'public_id TEXT');
+addColumnIfMissing('license_keys', 'last_hwid_reset_at TEXT');
+addColumnIfMissing('panels', 'buyer_role_id TEXT');
+addColumnIfMissing('panels', 'free_key_hours INTEGER DEFAULT 24');
 
 function makeId(prefix) {
   return `${prefix}_${crypto.randomBytes(8).toString('hex')}`;
@@ -181,6 +229,37 @@ function generateApiKey() {
 
 function generateLicenseKey() {
   return randomString(16, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789');
+}
+
+function makePublicId() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+function ensureScriptPublicIds() {
+  const rows = db.prepare('SELECT id FROM scripts WHERE public_id IS NULL OR TRIM(public_id) = ""').all();
+  const update = db.prepare('UPDATE scripts SET public_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+  for (const row of rows) {
+    update.run(makePublicId(), row.id);
+  }
+}
+
+ensureScriptPublicIds();
+
+function getAccessBan(discordId, userId = null) {
+  if (userId) {
+    return db.prepare('SELECT * FROM access_bans WHERE discord_id = ? OR user_id = ?').get(discordId || '', userId);
+  }
+  return db.prepare('SELECT * FROM access_bans WHERE discord_id = ?').get(discordId || '');
+}
+
+function isAccessBanned(discordId, userId = null) {
+  return Boolean(getAccessBan(discordId, userId));
+}
+
+function assertNotAccessBanned(discordId, userId = null) {
+  const ban = getAccessBan(discordId, userId);
+  if (!ban) return null;
+  return ban.reason || 'This account is blacklisted from using this website.';
 }
 
 function publicBaseUrl() {
@@ -213,23 +292,25 @@ function textBlock(fn) {
 
 const INLINE_APP_CSS = textBlock(function () {/*
 :root {
-  --bg: #0a0a0f;
-  --bg-2: #0d1117;
-  --panel: rgba(18, 18, 24, 0.86);
-  --panel-2: rgba(14, 14, 20, 0.92);
-  --border: rgba(0, 212, 255, 0.14);
-  --border-strong: rgba(0, 212, 255, 0.32);
-  --text: #e2e8f0;
-  --muted: rgba(148, 163, 184, 0.86);
-  --accent: #00d4ff;
-  --accent-2: #0891b2;
-  --success: #22c55e;
+  --bg: #08101a;
+  --bg-alt: #0b1320;
+  --panel: rgba(11, 18, 31, 0.84);
+  --panel-strong: rgba(12, 19, 33, 0.96);
+  --panel-soft: rgba(14, 24, 40, 0.72);
+  --border: rgba(109, 185, 255, 0.14);
+  --border-strong: rgba(109, 185, 255, 0.28);
+  --text: #e6eef9;
+  --muted: #93a5c4;
+  --accent: #67d1ff;
+  --accent-strong: #3aa3ff;
+  --success: #4ade80;
   --warning: #fbbf24;
-  --danger: #ef4444;
-  --shadow: 0 0 40px rgba(0, 212, 255, 0.06);
+  --danger: #fb7185;
+  --shadow: 0 24px 70px rgba(2, 8, 18, 0.45);
+  --radius-xl: 28px;
   --radius-lg: 22px;
   --radius-md: 16px;
-  --radius-sm: 10px;
+  --radius-sm: 12px;
 }
 
 * {
@@ -246,7 +327,10 @@ body {
 body {
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: var(--text);
-  background: radial-gradient(circle at top left, rgba(0, 212, 255, 0.08), transparent 35%), var(--bg);
+  background:
+    radial-gradient(circle at top left, rgba(58, 163, 255, 0.18), transparent 28%),
+    radial-gradient(circle at top right, rgba(103, 209, 255, 0.14), transparent 24%),
+    linear-gradient(180deg, #08101a 0%, #070d16 100%);
 }
 
 button,
@@ -265,112 +349,20 @@ a {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: 0;
-}
-
-.site-bg::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  opacity: 0.03;
   background-image:
-    linear-gradient(rgba(0, 212, 255, 0.3) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 212, 255, 0.3) 1px, transparent 1px);
-  background-size: 50px 50px;
-}
-
-.site-bg::after {
-  content: "";
-  position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: radial-gradient(ellipse at 30% 40%, rgba(0, 212, 255, 0.08) 0%, transparent 60%);
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(circle at center, black 60%, transparent 100%);
+  opacity: 0.5;
 }
 
 .panel {
   background: var(--panel);
-  backdrop-filter: blur(20px);
   border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
-  border-radius: var(--radius-md);
-}
-
-.auth-layout {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  position: relative;
-  z-index: 1;
-}
-
-.auth-card {
-  width: min(100%, 520px);
-  padding: 32px;
-  text-align: center;
-}
-
-.brand-block {
-  display: grid;
-  grid-template-columns: 1fr;
-  justify-items: center;
-  gap: 16px;
-  margin-bottom: 28px;
-}
-
-.brand-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 22px;
-}
-
-.brand-mark {
-  width: 64px;
-  height: 64px;
-  border-radius: 18px;
-  display: grid;
-  place-items: center;
-  font-size: 26px;
-  font-weight: 800;
-  color: var(--accent);
-  background: linear-gradient(135deg, rgba(0, 212, 255, 0.16), rgba(8, 145, 178, 0.06));
-  border: 1px solid rgba(0, 212, 255, 0.2);
-  box-shadow: 0 0 30px rgba(0, 212, 255, 0.12);
-}
-
-.brand-mark.small {
-  width: 46px;
-  height: 46px;
-  border-radius: 14px;
-  font-size: 18px;
-}
-
-.brand-name {
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--accent);
-  text-shadow: 0 0 20px rgba(0, 212, 255, 0.25);
-}
-
-.sidebar-caption,
-.helper-text,
-.muted,
-.resource-meta,
-.user-role,
-.stat-meta,
-.stat-label {
-  color: var(--muted);
-}
-
-.eyebrow {
-  margin: 0 0 6px;
-  color: var(--accent);
-  text-shadow: 0 0 20px rgba(0, 212, 255, 0.28);
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  backdrop-filter: blur(18px);
 }
 
 h1,
@@ -380,282 +372,370 @@ p {
   margin: 0;
 }
 
-h1 {
-  font-size: clamp(2rem, 4vw, 3rem);
+.eyebrow {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 700;
   color: var(--accent);
-  text-shadow: 0 0 20px rgba(0, 212, 255, 0.28);
 }
 
-h2 {
-  font-size: 1.2rem;
-  color: var(--accent);
-  margin-bottom: 6px;
+.muted,
+.helper-text,
+.resource-meta,
+.user-role,
+.stat-label,
+.stat-meta,
+.sidebar-caption,
+.editor-subtext,
+.empty-state,
+.kbd-hint {
+  color: var(--muted);
 }
 
-h3 {
+.auth-layout {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 28px 18px;
+  position: relative;
+  z-index: 1;
+}
+
+.auth-card {
+  width: min(100%, 640px);
+  padding: 34px;
+  display: grid;
+  gap: 24px;
+}
+
+.brand-block {
+  display: grid;
+  grid-template-columns: 86px 1fr;
+  gap: 18px;
+  align-items: center;
+}
+
+.brand-mark {
+  width: 86px;
+  height: 86px;
+  border-radius: 24px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, rgba(103, 209, 255, 0.2), rgba(58, 163, 255, 0.08));
+  border: 1px solid rgba(103, 209, 255, 0.24);
+  box-shadow: 0 20px 50px rgba(58, 163, 255, 0.18);
+  color: var(--accent);
+  font-size: 30px;
+  font-weight: 800;
+}
+
+.brand-mark.small {
+  width: 54px;
+  height: 54px;
+  border-radius: 18px;
+  font-size: 18px;
+}
+
+.hero-title {
+  font-size: clamp(2.1rem, 5vw, 3.7rem);
+  line-height: 0.98;
+  letter-spacing: -0.04em;
+}
+
+.hero-subtitle {
+  margin-top: 10px;
+  color: #cfdef5;
+  max-width: 560px;
   font-size: 1rem;
 }
 
+.auth-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 18px;
+}
+
+.auth-panel,
+.feature-panel {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: var(--radius-md);
+  padding: 20px;
+}
+
+.stack,
 .stack-lg,
 .stack-xl,
 .field,
+.nav-list,
 .meta-list,
-.nav-list {
+.editor-meta,
+.stat-card,
+.side-note,
+.section-stack {
   display: grid;
 }
 
-.stack-lg {
-  gap: 16px;
-}
-
-.stack-xl {
-  gap: 20px;
-}
+.stack { gap: 12px; }
+.stack-lg { gap: 18px; }
+.stack-xl { gap: 22px; }
+.section-stack { gap: 18px; }
 
 .field {
   gap: 8px;
-  text-align: left;
 }
 
-.field label {
-  color: rgba(148, 214, 255, 0.8);
-  font-size: 0.92rem;
+.field label,
+.switch-card label,
+.nav-link,
+.user-name {
+  font-weight: 600;
 }
 
 input,
 textarea,
 select {
   width: 100%;
-  background: rgba(0, 0, 0, 0.42);
-  border: 1px solid var(--border);
   color: var(--text);
-  padding: 13px 14px;
-  border-radius: var(--radius-sm);
-  transition: 0.25s ease;
+  background: rgba(4, 10, 19, 0.8);
+  border: 1px solid rgba(143, 182, 235, 0.14);
+  border-radius: 14px;
+  padding: 14px 15px;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 input::placeholder,
 textarea::placeholder {
-  color: rgba(148, 163, 184, 0.62);
+  color: #7287aa;
 }
 
 input:focus,
 textarea:focus,
 select:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 20px rgba(0, 212, 255, 0.08);
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 4px rgba(103, 209, 255, 0.08);
 }
 
 textarea {
   resize: vertical;
 }
 
-.mono,
-.code-block,
-.mono-inline,
-.code-actions button {
-  font-family: "Courier New", Consolas, monospace;
-}
-
-.checkbox-group {
-  align-content: center;
-  gap: 10px;
-}
-
-.check {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 0.92rem;
-  color: rgba(148, 214, 255, 0.8);
-}
-
-.check input {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent);
-}
-
 .button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 44px;
-  padding: 0 18px;
-  border-radius: var(--radius-sm);
-  border: 1px solid rgba(0, 212, 255, 0.2);
+  gap: 10px;
+  min-height: 46px;
+  padding: 0 16px;
+  border-radius: 14px;
+  border: 1px solid transparent;
   cursor: pointer;
-  transition: all 0.25s ease;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease, opacity 0.2s ease;
 }
 
-.button:hover {
-  transform: translateY(-2px);
-}
+.button:hover { transform: translateY(-1px); }
+.button:disabled { opacity: 0.6; cursor: wait; transform: none; }
 
 .button.primary {
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  color: #0a0a0f;
+  color: #07111b;
   font-weight: 700;
-  box-shadow: 0 0 30px rgba(0, 212, 255, 0.2);
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  box-shadow: 0 16px 40px rgba(58, 163, 255, 0.28);
 }
 
 .button.secondary,
 .button.ghost {
-  background: linear-gradient(135deg, rgba(0, 212, 255, 0.12), rgba(8, 145, 178, 0.04));
-  color: var(--accent);
+  color: var(--text);
+  border-color: rgba(143, 182, 235, 0.14);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .button.danger {
-  background: rgba(239, 68, 68, 0.08);
-  color: #fda4af;
-  border-color: rgba(239, 68, 68, 0.22);
+  color: #ffd7de;
+  border-color: rgba(251, 113, 133, 0.24);
+  background: rgba(251, 113, 133, 0.08);
 }
 
 .button.small {
-  min-height: 36px;
-  padding: 0 12px;
-  font-size: 0.86rem;
+  min-height: 38px;
+  padding: 0 13px;
+  border-radius: 12px;
+  font-size: 0.9rem;
 }
 
-.full-width {
-  width: 100%;
-}
+.full-width { width: 100%; }
 
 .divider {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   gap: 14px;
   align-items: center;
-  color: rgba(148, 214, 255, 0.4);
-  font-size: 0.85rem;
+  color: var(--muted);
+  font-size: 0.9rem;
 }
 
 .divider::before,
 .divider::after {
   content: "";
   height: 1px;
-  background: rgba(0, 212, 255, 0.1);
+  background: rgba(143, 182, 235, 0.12);
+}
+
+.feature-list {
+  display: grid;
+  gap: 12px;
+}
+
+.feature-item {
+  padding: 14px 15px;
+  border-radius: 14px;
+  border: 1px solid rgba(143, 182, 235, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.feature-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin-bottom: 4px;
 }
 
 .dashboard-shell {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: 240px 1fr;
+  grid-template-columns: 288px 1fr;
+  gap: 24px;
   min-height: 100vh;
+  padding: 24px;
 }
 
 .sidebar {
-  width: 240px;
-  height: 100vh;
-  position: fixed;
-  inset: 0 auto 0 0;
-  padding: 20px;
-  border-right: 1px solid rgba(0, 212, 255, 0.1);
-  border-radius: 0;
-  background: rgba(18, 18, 24, 0.95);
-  overflow-y: auto;
+  position: sticky;
+  top: 24px;
+  height: calc(100vh - 48px);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.brand-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.brand-name {
+  font-size: 1rem;
+  font-weight: 700;
 }
 
 .user-summary {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 18px;
-  padding: 12px;
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 12px;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(143, 182, 235, 0.08);
 }
 
 .avatar {
-  width: 42px;
-  height: 42px;
-  border-radius: 999px;
-  border: 2px solid rgba(0, 212, 255, 0.25);
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
   object-fit: cover;
-}
-
-.user-name {
-  font-weight: 600;
+  border: 1px solid rgba(143, 182, 235, 0.14);
 }
 
 .nav-list {
-  gap: 8px;
+  gap: 10px;
   margin-bottom: auto;
 }
 
 .nav-link {
   appearance: none;
-  border: 0;
+  border: 1px solid transparent;
+  border-radius: 14px;
   background: transparent;
-  color: #94a3b8;
-  padding: 10px 14px;
-  border-radius: 8px;
+  color: #c6d4ea;
+  padding: 12px 14px;
   text-align: left;
   cursor: pointer;
-  transition: 0.2s ease;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
 .nav-link:hover {
-  background: rgba(0, 212, 255, 0.05);
-  color: var(--text);
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(143, 182, 235, 0.1);
 }
 
 .nav-link.active {
-  background: rgba(0, 212, 255, 0.1);
-  color: var(--accent);
-  border-left: 2px solid var(--accent);
+  color: var(--text);
+  background: linear-gradient(135deg, rgba(103, 209, 255, 0.16), rgba(58, 163, 255, 0.08));
+  border-color: rgba(103, 209, 255, 0.24);
 }
 
 .sidebar-footer {
-  margin-top: 20px;
+  display: grid;
+  gap: 10px;
 }
 
 .content-area {
-  margin-left: 240px;
-  padding: 20px 30px;
+  min-width: 0;
   display: grid;
-  gap: 18px;
+  gap: 22px;
 }
 
 .topbar {
-  padding: 18px 20px;
+  padding: 22px 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 20px;
+}
+
+.page-title {
+  font-size: clamp(1.8rem, 3vw, 2.8rem);
+  line-height: 1;
+  letter-spacing: -0.03em;
 }
 
 .topbar-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .live-pill,
 .count-badge,
-.pill,
-.badge {
+.badge,
+.filter-pill,
+.editor-chip {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   border-radius: 999px;
 }
 
-.live-pill {
-  padding: 8px 12px;
-  color: rgba(148, 214, 255, 0.78);
-  border: 1px solid rgba(0, 212, 255, 0.12);
-  background: rgba(0, 0, 0, 0.2);
+.live-pill,
+.count-badge,
+.filter-pill,
+.editor-chip {
+  padding: 10px 12px;
+  border: 1px solid rgba(143, 182, 235, 0.12);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .live-dot {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   border-radius: 999px;
   background: var(--success);
-  box-shadow: 0 0 12px rgba(34, 197, 94, 0.6);
+  box-shadow: 0 0 16px rgba(74, 222, 128, 0.45);
 }
 
 .stats-grid {
@@ -665,14 +745,13 @@ textarea {
 }
 
 .stat-card {
-  padding: 18px;
-  display: grid;
-  gap: 8px;
+  padding: 20px;
+  gap: 10px;
 }
 
 .stat-value {
-  font-size: 1.6rem;
-  color: var(--accent);
+  font-size: 2rem;
+  line-height: 1;
 }
 
 .view {
@@ -680,11 +759,12 @@ textarea {
 }
 
 .view.active {
-  display: block;
+  display: grid;
+  animation: fadeUp 0.28s ease;
 }
 
 .section-card {
-  padding: 20px;
+  padding: 24px;
 }
 
 .section-header {
@@ -692,11 +772,7 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 16px;
-}
-
-.inline-header {
-  margin-bottom: 12px;
+  margin-bottom: 18px;
 }
 
 .form-grid {
@@ -708,136 +784,238 @@ textarea {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.form-grid.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .form-grid .full {
   grid-column: 1 / -1;
 }
 
-.form-actions {
+.form-actions,
+.action-row,
+.badge-row,
+.card-toolbar,
+.editor-actions,
+.toggle-grid,
+.modal-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  justify-content: flex-start;
-  margin-top: 12px;
+  gap: 10px;
 }
 
-.count-badge,
-.pill {
-  padding: 8px 12px;
-  background: rgba(0, 0, 0, 0.24);
-  border: 1px solid rgba(0, 212, 255, 0.12);
-  color: rgba(148, 214, 255, 0.78);
+.toggle-grid {
+  align-items: stretch;
+}
+
+.switch-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 54px;
+  padding: 0 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(143, 182, 235, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.switch-card input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent-strong);
 }
 
 .resource-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 18px;
 }
 
 .resource-card {
-  background: rgba(18, 18, 24, 0.85);
-  border: 1px solid rgba(0, 212, 255, 0.1);
-  border-radius: 12px;
-  padding: 16px;
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(143, 182, 235, 0.1);
+  background: var(--panel-strong);
+  box-shadow: var(--shadow);
   display: grid;
-  gap: 12px;
+  gap: 16px;
+  transform: translateY(0);
+  transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
+}
+
+.resource-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(103, 209, 255, 0.22);
+  box-shadow: 0 26px 80px rgba(2, 8, 18, 0.5);
 }
 
 .resource-header {
   display: flex;
   justify-content: space-between;
+  gap: 14px;
   align-items: flex-start;
-  gap: 12px;
 }
 
-.badge-row,
-.action-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.resource-title {
+  font-size: 1.05rem;
+  font-weight: 700;
 }
 
 .badge {
-  font-size: 0.72rem;
-  padding: 5px 10px;
+  padding: 7px 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
 }
 
-.badge.info {
-  background: rgba(0, 212, 255, 0.15);
-  color: var(--accent);
-}
-
-.badge.success {
-  background: rgba(34, 197, 94, 0.15);
-  color: #86efac;
-}
-
-.badge.warning {
-  background: rgba(251, 191, 36, 0.15);
-  color: #fcd34d;
-}
-
-.badge.danger {
-  background: rgba(239, 68, 68, 0.15);
-  color: #fca5a5;
-}
+.badge.info { background: rgba(103, 209, 255, 0.14); color: #d4f2ff; }
+.badge.success { background: rgba(74, 222, 128, 0.14); color: #d7ffe5; }
+.badge.warning { background: rgba(251, 191, 36, 0.14); color: #fff1c5; }
+.badge.danger { background: rgba(251, 113, 133, 0.14); color: #ffdbe2; }
 
 .code-block {
-  background: rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(0, 212, 255, 0.1);
-  border-radius: 8px;
+  background: rgba(6, 12, 21, 0.92);
+  border: 1px solid rgba(143, 182, 235, 0.1);
+  border-radius: 18px;
   overflow: hidden;
 }
 
 .code-actions {
+  padding: 11px 14px;
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 10px 12px;
-  border-bottom: 1px solid rgba(0, 212, 255, 0.1);
-  color: rgba(148, 214, 255, 0.78);
+  gap: 12px;
+  align-items: center;
+  border-bottom: 1px solid rgba(143, 182, 235, 0.08);
+  font-size: 0.88rem;
 }
 
 .code-actions button {
-  background: transparent;
   border: 0;
+  background: transparent;
   color: var(--accent);
   cursor: pointer;
 }
 
 .code-block pre {
   margin: 0;
-  padding: 12px;
-  font-size: 12px;
-  color: var(--accent);
-  overflow-x: auto;
+  padding: 14px 16px;
+  font-size: 0.84rem;
+  font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+  color: #bae7ff;
   white-space: pre-wrap;
-  word-break: break-all;
+  word-break: break-word;
+  max-height: 200px;
+  overflow: auto;
 }
 
 .meta-list {
-  gap: 8px;
+  gap: 10px;
 }
 
 .meta-item {
   display: flex;
   justify-content: space-between;
-  gap: 10px;
-  font-size: 0.88rem;
+  gap: 12px;
+  font-size: 0.92rem;
 }
 
 .meta-item span:last-child {
-  color: rgba(148, 163, 184, 0.78);
+  color: var(--muted);
   text-align: right;
 }
 
+.editor-card {
+  display: grid;
+  gap: 12px;
+}
+
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.editor-shell {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  min-height: 420px;
+  border-radius: 22px;
+  overflow: hidden;
+  border: 1px solid rgba(143, 182, 235, 0.12);
+  background: rgba(5, 11, 20, 0.96);
+}
+
+.editor-lines {
+  margin: 0;
+  padding: 18px 10px 18px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #61779a;
+  text-align: right;
+  line-height: 1.6;
+  user-select: none;
+  overflow: hidden;
+  font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+  font-size: 0.9rem;
+}
+
+.editor-textarea {
+  min-height: 420px;
+  border: 0;
+  border-radius: 0;
+  padding: 18px;
+  margin: 0;
+  resize: none;
+  background: transparent;
+  box-shadow: none !important;
+  color: #edf6ff;
+  line-height: 1.6;
+  tab-size: 2;
+  font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+  font-size: 0.93rem;
+  caret-color: var(--accent);
+  overflow: auto;
+}
+
+.editor-drop.active {
+  border-color: rgba(103, 209, 255, 0.34);
+  box-shadow: inset 0 0 0 1px rgba(103, 209, 255, 0.24);
+}
+
+.editor-actions {
+  justify-content: space-between;
+  align-items: center;
+}
+
+.editor-meta {
+  gap: 6px;
+}
+
+.inline-note {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
 .empty-state {
+  padding: 34px;
+  border-radius: 20px;
   text-align: center;
-  padding: 32px;
-  color: rgba(148, 214, 255, 0.32);
-  border: 1px dashed rgba(0, 212, 255, 0.12);
-  border-radius: 12px;
+  border: 1px dashed rgba(143, 182, 235, 0.14);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.search-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.search-row .field {
+  min-width: 220px;
+  flex: 1 1 220px;
 }
 
 .toast-root {
@@ -850,66 +1028,140 @@ textarea {
 }
 
 .toast {
-  min-width: 250px;
+  min-width: 260px;
   max-width: 360px;
   padding: 14px 16px;
-  border-radius: 12px;
-  background: rgba(18, 18, 24, 0.96);
-  border: 1px solid rgba(0, 212, 255, 0.14);
+  border-radius: 16px;
+  border: 1px solid rgba(143, 182, 235, 0.14);
+  background: rgba(11, 18, 31, 0.95);
+  box-shadow: var(--shadow);
+  animation: fadeUp 0.22s ease;
+}
+
+.toast.success { border-color: rgba(74, 222, 128, 0.24); }
+.toast.error { border-color: rgba(251, 113, 133, 0.24); }
+.toast-title { font-weight: 700; margin-bottom: 4px; }
+.toast-message { color: var(--muted); font-size: 0.92rem; }
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(4, 8, 16, 0.62);
+  backdrop-filter: blur(8px);
+}
+
+.modal.open { display: flex; }
+
+.modal-card {
+  width: min(100%, 500px);
+  padding: 24px;
+  border-radius: 22px;
+  background: rgba(10, 18, 31, 0.98);
+  border: 1px solid rgba(143, 182, 235, 0.14);
   box-shadow: var(--shadow);
 }
 
-.toast.success {
-  border-color: rgba(34, 197, 94, 0.26);
+.hidden { display: none !important; }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-.toast.error {
-  border-color: rgba(239, 68, 68, 0.24);
+@media (max-width: 1220px) {
+  .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-.toast-title {
-  font-weight: 700;
-}
-
-.toast-message {
-  font-size: 0.9rem;
-  color: var(--muted);
-  margin-top: 4px;
-}
-
-@media (max-width: 1100px) {
-  .stats-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   .dashboard-shell {
     grid-template-columns: 1fr;
+    padding: 16px;
   }
 
   .sidebar {
-    position: relative;
-    width: 100%;
+    position: static;
     height: auto;
-    border-right: 0;
-    border-bottom: 1px solid rgba(0, 212, 255, 0.1);
   }
 
-  .content-area {
-    margin-left: 0;
-    padding: 15px;
+  .nav-list {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   }
+}
 
+@media (max-width: 860px) {
+  .auth-grid,
   .form-grid.two,
+  .form-grid.three,
   .stats-grid,
   .resource-grid {
     grid-template-columns: 1fr;
   }
 
+  .brand-block {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+
+  .brand-mark {
+    margin: 0 auto;
+  }
+
   .topbar {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .editor-shell {
+    grid-template-columns: 44px 1fr;
+    min-height: 340px;
+  }
+
+  .editor-textarea,
+  .editor-lines {
+    min-height: 340px;
+  }
+}
+
+@media (max-width: 640px) {
+  .auth-card,
+  .section-card,
+  .topbar,
+  .sidebar,
+  .modal-card {
+    padding: 18px;
+  }
+
+  .dashboard-shell {
+    gap: 16px;
+  }
+
+  .resource-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .resource-card,
+  .editor-shell,
+  .code-block {
+    border-radius: 18px;
+  }
+
+  .editor-actions,
+  .form-actions,
+  .action-row,
+  .topbar-actions {
+    width: 100%;
+  }
+
+  .topbar-actions .button,
+  .form-actions .button,
+  .action-row .button,
+  .editor-actions .button {
+    flex: 1 1 auto;
   }
 }
 
@@ -965,18 +1217,28 @@ const defaults = APP.defaults || { maxScripts: 100, maxPanels: 50 };
 const baseUrl = APP.baseUrl || window.location.origin;
 
 const viewTitles = {
-  scripts: '📜 Scripts',
-  panels: '📋 Panels',
-  keys: '🔑 Keys',
-  hwids: '🚫 HWID Bans',
-  admin: '⚙️ Admin Panel',
+  scripts: 'Scripts',
+  panels: 'Panels',
+  keys: 'Keys',
+  hwids: 'HWID Bans',
+  admin: 'Admin',
 };
 
+const viewDescriptions = {
+  scripts: 'Manage hosted scripts, loadstrings, compression, and upload flow.',
+  panels: 'Create polished Discord panels and role-enabled access buttons.',
+  keys: 'Generate, assign, copy, and revoke access keys.',
+  hwids: 'Manage blocked hardware identifiers and enforcement.',
+  admin: 'Create API keys, edit limits, and blacklist Discord IDs from website access.',
+};
+
+let currentView = 'scripts';
 let currentData = {
   scripts: [],
   panels: [],
   keys: [],
   bannedHWIDs: [],
+  accessBans: [],
   limits: {
     maxScripts: defaults.maxScripts,
     currentScripts: 0,
@@ -986,10 +1248,8 @@ let currentData = {
     remainingPanels: defaults.maxPanels,
   },
 };
-
 let apiKeysCache = [];
 let serverTime = Date.now();
-let currentView = 'scripts';
 
 function qs(id) {
   return document.getElementById(id);
@@ -1023,7 +1283,6 @@ function emptyState(message) {
 function notify(title, message, type = 'success') {
   const root = qs('toastRoot');
   if (!root) return;
-
   const toast = document.createElement('div');
   toast.className = `toast ${type}`;
   toast.innerHTML = `
@@ -1031,102 +1290,106 @@ function notify(title, message, type = 'success') {
     <div class="toast-message">${escapeHtml(message)}</div>
   `;
   root.appendChild(toast);
-
-  setTimeout(() => {
-    toast.remove();
-  }, 3200);
+  setTimeout(() => toast.remove(), 3400);
 }
 
 async function requestJSON(url, options = {}) {
   const response = await fetch(url, options);
-
   if (response.status === 401) {
     window.location.href = '/';
     throw new Error('Unauthorized');
   }
 
   const text = await response.text();
-  let data;
+  let data = {};
   try {
     data = text ? JSON.parse(text) : {};
   } catch {
     data = { error: text || 'Request failed' };
   }
 
-  if (!response.ok) {
-    throw new Error(data.error || 'Request failed');
-  }
-
+  if (!response.ok) throw new Error(data.error || 'Request failed');
   return data;
 }
 
-function getScriptById(id) {
-  return (currentData.scripts || []).find((script) => script.id === id);
-}
-
-function getPanelById(id) {
-  return (currentData.panels || []).find((panel) => panel.id === id);
+function hostedLoader(script) {
+  const url = `${baseUrl}/scripts/hosted/${script.public_id}.lua`;
+  return script.ffa_mode
+    ? `loadstring(game:HttpGet("${url}"))()`
+    : `script_key = "YOUR_KEY_HERE"\n\nloadstring(game:HttpGet("${url}"))()`;
 }
 
 function copyText(text) {
   navigator.clipboard.writeText(text).then(() => {
-    notify('Copied', 'The value has been copied to your clipboard.');
+    notify('Copied', 'Copied to clipboard.');
   }).catch(() => {
-    notify('Copy failed', 'The browser blocked clipboard access.', 'error');
+    notify('Clipboard blocked', 'Browser denied clipboard access.', 'error');
   });
 }
 
-window.copyText = copyText;
+function getScriptById(id) {
+  return (currentData.scripts || []).find((row) => row.id === id);
+}
+
+function getPanelById(id) {
+  return (currentData.panels || []).find((row) => row.id === id);
+}
+
+function setPageMeta(view) {
+  qs('pageTitle').textContent = viewTitles[view] || 'Dashboard';
+  qs('pageSubtitle').textContent = viewDescriptions[view] || 'Manage your workspace.';
+}
+
+function setView(view) {
+  currentView = view;
+  document.querySelectorAll('.view').forEach((node) => node.classList.toggle('active', node.id === `view-${view}`));
+  document.querySelectorAll('.nav-link').forEach((node) => node.classList.toggle('active', node.dataset.view === view));
+  setPageMeta(view);
+  if (view === 'admin') loadApiKeys({ silent: true });
+}
 
 function updateSummary() {
   const limits = currentData.limits || {};
   const activeKeys = (currentData.keys || []).filter((row) => !isExpired(row.expires_at)).length;
-
-  qs('statScripts').textContent = `${limits.currentScripts || 0}/${limits.maxScripts || defaults.maxScripts}`;
-  qs('statScriptsMeta').textContent = `${limits.remainingScripts || 0} remaining`;
-  qs('statPanels').textContent = `${limits.currentPanels || 0}/${limits.maxPanels || defaults.maxPanels}`;
-  qs('statPanelsMeta').textContent = `${limits.remainingPanels || 0} remaining`;
-  qs('statKeys').textContent = String((currentData.keys || []).length);
-  qs('statKeysMeta').textContent = `${activeKeys} active`;
-  qs('statHwids').textContent = String((currentData.bannedHWIDs || []).length);
-  qs('statHwidsMeta').textContent = 'Current blocks';
+  qs('statScripts').textContent = `${limits.currentScripts || 0}`;
+  qs('statScriptsMeta').textContent = `${limits.remainingScripts || 0} of ${limits.maxScripts || defaults.maxScripts} remaining`;
+  qs('statPanels').textContent = `${limits.currentPanels || 0}`;
+  qs('statPanelsMeta').textContent = `${limits.remainingPanels || 0} of ${limits.maxPanels || defaults.maxPanels} remaining`;
+  qs('statKeys').textContent = `${currentData.keys?.length || 0}`;
+  qs('statKeysMeta').textContent = `${activeKeys} active keys`;
+  qs('statHwids').textContent = `${currentData.bannedHWIDs?.length || 0}`;
+  qs('statHwidsMeta').textContent = 'Tracked block entries';
 }
 
 function renderScripts() {
   const list = qs('scriptsList');
-  const scripts = currentData.scripts || [];
-  qs('scriptsCount').textContent = `${scripts.length} item${scripts.length === 1 ? '' : 's'}`;
-
-  if (!scripts.length) {
-    list.innerHTML = emptyState('No scripts have been created yet.');
+  const rows = currentData.scripts || [];
+  qs('scriptsCount').textContent = `${rows.length} items`;
+  if (!rows.length) {
+    list.innerHTML = emptyState('No scripts have been uploaded yet.');
     return;
   }
 
-  list.innerHTML = scripts.map((script) => {
-    const isObfuscated = Boolean(script.obfuscated_code);
-    const loader = script.ffa_mode
-      ? `loadstring(game:HttpGet("${baseUrl}/loader/${script.id}"))()`
-      : [
-          'script_key = "YOUR_KEY_HERE"',
-          `loadstring(game:HttpGet("${baseUrl}/script/${script.id}?key=" .. script_key .. "&hwid=" .. game:GetService("HttpService"):GenerateGUID(false)))()`,
-        ].join('\n');
-
-    const statusBadge = badge(script.status === 'active' ? '✅ Active' : '⛔ Disabled', script.status === 'active' ? 'success' : 'danger');
-    const accessBadge = badge(script.ffa_mode ? '🔓 FFA' : '🔒 Key Required', script.ffa_mode ? 'warning' : 'info');
-    const obfuscationBadge = badge(isObfuscated ? '🔮 Obfuscated' : 'Plain source', isObfuscated ? 'info' : 'warning');
-
+  list.innerHTML = rows.map((script) => {
+    const loader = hostedLoader(script);
+    const hostedUrl = `${baseUrl}/scripts/hosted/${script.public_id}.lua`;
     return `
       <article class="resource-card">
         <div class="resource-header">
           <div>
-            <h3>${escapeHtml(script.name)}</h3>
+            <div class="resource-title">${escapeHtml(script.name)}</div>
             <div class="resource-meta">Created ${escapeHtml(formatDate(script.created_at))}</div>
           </div>
           <div class="badge-row">
-            ${statusBadge}
-            ${accessBadge}
-            ${obfuscationBadge}
+            ${badge(script.status === 'active' ? 'Active' : 'Disabled', script.status === 'active' ? 'success' : 'danger')}
+            ${badge(script.ffa_mode ? 'Open Access' : 'Key Required', script.ffa_mode ? 'warning' : 'info')}
+            ${badge(script.compress_mode ? 'Compressed' : 'Source', script.compress_mode ? 'info' : 'warning')}
           </div>
+        </div>
+
+        <div class="meta-list">
+          <div class="meta-item"><strong>Script ID</strong><span>${escapeHtml(script.id)}</span></div>
+          <div class="meta-item"><strong>Hosted Path</strong><span>${escapeHtml(script.public_id || '')}</span></div>
         </div>
 
         <div class="code-block">
@@ -1137,11 +1400,19 @@ function renderScripts() {
           <pre>${escapeHtml(loader)}</pre>
         </div>
 
+        <div class="code-block">
+          <div class="code-actions">
+            <span>Hosted file</span>
+            <button type="button" onclick='copyText(${JSON.stringify(hostedUrl)})'>Copy URL</button>
+          </div>
+          <pre>${escapeHtml(hostedUrl)}</pre>
+        </div>
+
         <div class="action-row">
-            <button class="button secondary small" onclick="toggleScript('${script.id}')">${script.status === 'active' ? '⏸ Disable' : '▶ Enable'}</button>
-          <button class="button secondary small" onclick="toggleFfa('${script.id}')">${script.ffa_mode ? '🔓 Disable FFA' : '🔒 Enable FFA'}</button>
-          ${isObfuscated ? '' : `<button class="button primary small" onclick="obfuscateScript('${script.id}')">🔮 Obfuscate</button>`}
-          <button class="button danger small" onclick="deleteScript('${script.id}')">✕</button>
+          <button class="button secondary small" onclick="toggleScript('${script.id}')">${script.status === 'active' ? 'Disable' : 'Enable'}</button>
+          <button class="button secondary small" onclick="toggleFfa('${script.id}')">${script.ffa_mode ? 'Disable Open Access' : 'Enable Open Access'}</button>
+          ${script.compress_mode ? '' : `<button class="button primary small" onclick="obfuscateScript('${script.id}')">Compress</button>`}
+          <button class="button danger small" onclick="deleteScript('${script.id}')">Delete</button>
         </div>
       </article>
     `;
@@ -1150,36 +1421,39 @@ function renderScripts() {
 
 function renderPanels() {
   const list = qs('panelsList');
-  const panels = currentData.panels || [];
-  qs('panelsCount').textContent = `${panels.length} item${panels.length === 1 ? '' : 's'}`;
-
-  if (!panels.length) {
-    list.innerHTML = emptyState('No panels have been created yet.');
+  const rows = currentData.panels || [];
+  qs('panelsCount').textContent = `${rows.length} items`;
+  if (!rows.length) {
+    list.innerHTML = emptyState('No Discord panels have been created yet.');
     return;
   }
 
-  list.innerHTML = panels.map((panel) => {
+  list.innerHTML = rows.map((panel) => {
     const script = getScriptById(panel.script_id);
     return `
       <article class="resource-card">
         <div class="resource-header">
           <div>
-            <h3>${escapeHtml(panel.name)}</h3>
+            <div class="resource-title">${escapeHtml(panel.name)}</div>
             <div class="resource-meta">${escapeHtml(panel.description || 'No description')}</div>
           </div>
-          <div class="badge-row">${badge('📋 Panel', 'info')}</div>
+          <div class="badge-row">
+            ${badge('Discord Panel', 'info')}
+            ${badge((panel.free_key_hours || 0) > 0 ? `Free Key ${panel.free_key_hours}h` : 'Free Key Off', (panel.free_key_hours || 0) > 0 ? 'success' : 'warning')}
+          </div>
         </div>
 
         <div class="meta-list">
           <div class="meta-item"><strong>Script</strong><span>${escapeHtml(script?.name || panel.script_id)}</span></div>
-          <div class="meta-item"><strong>Channel</strong><span class="mono-inline">${escapeHtml(panel.channel_id)}</span></div>
-          <div class="meta-item"><strong>Cooldown</strong><span>${escapeHtml(String(panel.hwid_cooldown))} seconds</span></div>
-          <div class="meta-item"><strong>Created</strong><span>${escapeHtml(formatDate(panel.created_at))}</span></div>
+          <div class="meta-item"><strong>Channel ID</strong><span>${escapeHtml(panel.channel_id)}</span></div>
+          <div class="meta-item"><strong>Buyer Role</strong><span>${escapeHtml(panel.buyer_role_id || 'Not set')}</span></div>
+          <div class="meta-item"><strong>HWID Cooldown</strong><span>${escapeHtml(String(panel.hwid_cooldown || 0))} seconds</span></div>
         </div>
 
         <div class="action-row">
-          <button class="button primary small" onclick="sendPanel('${panel.id}')">📤 Send</button>
-          <button class="button danger small" onclick="deletePanel('${panel.id}')">✕</button>
+          <button class="button primary small" onclick="sendPanel('${panel.id}')">Send Panel</button>
+          <button class="button secondary small" onclick='copyText(${JSON.stringify(panel.id)})'>Copy Panel ID</button>
+          <button class="button danger small" onclick="deletePanel('${panel.id}')">Delete</button>
         </div>
       </article>
     `;
@@ -1188,43 +1462,43 @@ function renderPanels() {
 
 function renderKeys() {
   const list = qs('keysList');
-  const keys = currentData.keys || [];
-  qs('keysCount').textContent = `${keys.length} item${keys.length === 1 ? '' : 's'}`;
-
-  if (!keys.length) {
+  const rows = currentData.keys || [];
+  qs('keysCount').textContent = `${rows.length} items`;
+  if (!rows.length) {
     list.innerHTML = emptyState('No license keys have been created yet.');
     return;
   }
 
-  list.innerHTML = keys.map((row) => {
+  list.innerHTML = rows.map((row) => {
     const panel = getPanelById(row.panel_id);
     const script = getScriptById(row.script_id);
-    const status = isExpired(row.expires_at)
-      ? badge('❌ Expired', 'danger')
+    const state = isExpired(row.expires_at)
+      ? badge('Expired', 'danger')
       : row.claimed_by
-        ? badge('📌 Claimed', 'warning')
-        : badge('✅ Active', 'success');
+        ? badge('Assigned', 'warning')
+        : badge('Available', 'success');
 
     return `
       <article class="resource-card">
         <div class="resource-header">
           <div>
-            <h3 class="mono-inline">${escapeHtml(row.key)}</h3>
+            <div class="resource-title">${escapeHtml(row.key)}</div>
             <div class="resource-meta">${escapeHtml(row.note || 'No note')}</div>
           </div>
-          <div class="badge-row">${status}</div>
+          <div class="badge-row">${state}</div>
         </div>
 
         <div class="meta-list">
           <div class="meta-item"><strong>Script</strong><span>${escapeHtml(script?.name || row.script_id)}</span></div>
           <div class="meta-item"><strong>Panel</strong><span>${escapeHtml(panel?.name || row.panel_id || 'None')}</span></div>
           <div class="meta-item"><strong>Expires</strong><span>${escapeHtml(formatDate(row.expires_at))}</span></div>
-          <div class="meta-item"><strong>Claimed by</strong><span>${escapeHtml(row.claimed_tag || 'Not claimed')}</span></div>
+          <div class="meta-item"><strong>Assigned To</strong><span>${escapeHtml(row.claimed_tag || 'Unassigned')}</span></div>
+          <div class="meta-item"><strong>Locked HWID</strong><span>${escapeHtml(row.hwid || 'Not locked yet')}</span></div>
         </div>
 
         <div class="action-row">
           <button class="button secondary small" onclick='copyText(${JSON.stringify(row.key)})'>Copy</button>
-          <button class="button danger small" onclick="deleteKey('${row.key}')">✕</button>
+          <button class="button danger small" onclick="deleteKey('${row.key}')">Delete</button>
         </div>
       </article>
     `;
@@ -1234,10 +1508,9 @@ function renderKeys() {
 function renderHwids() {
   const list = qs('hwidList');
   const rows = currentData.bannedHWIDs || [];
-  qs('hwidsCount').textContent = `${rows.length} item${rows.length === 1 ? '' : 's'}`;
-
+  qs('hwidsCount').textContent = `${rows.length} items`;
   if (!rows.length) {
-    list.innerHTML = emptyState('No HWIDs are currently banned.');
+    list.innerHTML = emptyState('No HWIDs are currently blocked.');
     return;
   }
 
@@ -1245,18 +1518,16 @@ function renderHwids() {
     <article class="resource-card">
       <div class="resource-header">
         <div>
-          <h3 class="mono-inline">${escapeHtml(row.hwid)}</h3>
+          <div class="resource-title">${escapeHtml(row.hwid)}</div>
           <div class="resource-meta">${escapeHtml(row.reason || 'No reason provided')}</div>
         </div>
-          <div class="badge-row">${badge('🚫 Blocked', 'danger')}</div>
+        <div class="badge-row">${badge('Blocked', 'danger')}</div>
       </div>
-
       <div class="meta-list">
         <div class="meta-item"><strong>Created</strong><span>${escapeHtml(formatDate(row.created_at))}</span></div>
       </div>
-
       <div class="action-row">
-        <button class="button danger small" onclick="unbanHwid('${row.hwid}')">↺ Unban</button>
+        <button class="button danger small" onclick="unbanHwid('${row.hwid}')">Unban</button>
       </div>
     </article>
   `).join('');
@@ -1266,8 +1537,7 @@ function renderApiKeys() {
   if (!currentUser.is_owner) return;
   const list = qs('apiKeysList');
   const rows = apiKeysCache || [];
-  qs('apiKeysCount').textContent = `${rows.length} item${rows.length === 1 ? '' : 's'}`;
-
+  qs('apiKeysCount').textContent = `${rows.length} items`;
   if (!rows.length) {
     list.innerHTML = emptyState('No API keys have been generated yet.');
     return;
@@ -1275,30 +1545,28 @@ function renderApiKeys() {
 
   list.innerHTML = rows.map((row) => {
     const status = !row.is_active
-      ? badge('❌ Revoked', 'danger')
+      ? badge('Revoked', 'danger')
       : isExpired(row.expires_at)
-        ? badge('⏰ Expired', 'warning')
-        : badge('✅ Active', 'success');
-
+        ? badge('Expired', 'warning')
+        : badge('Active', 'success');
     return `
       <article class="resource-card">
         <div class="resource-header">
           <div>
-            <h3 class="mono-inline">${escapeHtml(row.key)}</h3>
+            <div class="resource-title">${escapeHtml(row.key)}</div>
             <div class="resource-meta">${escapeHtml(row.notes || 'No notes')}</div>
           </div>
           <div class="badge-row">${status}</div>
         </div>
-
         <div class="meta-list">
           <div class="meta-item"><strong>User</strong><span>${escapeHtml(row.owner_username || row.owner_discord || row.owner_id)}</span></div>
           <div class="meta-item"><strong>Limits</strong><span>${escapeHtml(String(row.max_scripts))} scripts / ${escapeHtml(String(row.max_panels))} panels</span></div>
           <div class="meta-item"><strong>Expires</strong><span>${escapeHtml(formatDate(row.expires_at))}</span></div>
-          <div class="meta-item"><strong>Last used</strong><span>${escapeHtml(formatDate(row.last_used_at))}</span></div>
+          <div class="meta-item"><strong>Last Used</strong><span>${escapeHtml(formatDate(row.last_used_at))}</span></div>
         </div>
-
         <div class="action-row">
           <button class="button secondary small" onclick='copyText(${JSON.stringify(row.key)})'>Copy</button>
+          <button class="button secondary small" onclick='prefillLimitEditor(${JSON.stringify(row.owner_discord || row.owner_id)}, ${Number(row.max_scripts || 0)}, ${Number(row.max_panels || 0)})'>Edit Limits</button>
           ${row.is_active ? `<button class="button danger small" onclick="revokeApiKey('${row.key}')">Revoke</button>` : ''}
         </div>
       </article>
@@ -1306,22 +1574,59 @@ function renderApiKeys() {
   }).join('');
 }
 
+function renderAccessBans() {
+  if (!currentUser.is_owner) return;
+  const list = qs('accessBansList');
+  const rows = currentData.accessBans || [];
+  qs('accessBansCount').textContent = `${rows.length} items`;
+  if (!rows.length) {
+    list.innerHTML = emptyState('No website access bans are active.');
+    return;
+  }
+
+  list.innerHTML = rows.map((row) => `
+    <article class="resource-card">
+      <div class="resource-header">
+        <div>
+          <div class="resource-title">${escapeHtml(row.discord_id || row.user_id || 'Unknown')}</div>
+          <div class="resource-meta">${escapeHtml(row.reason || 'Blacklisted from website access')}</div>
+        </div>
+        <div class="badge-row">${badge('Website Blacklist', 'danger')}</div>
+      </div>
+      <div class="meta-list">
+        <div class="meta-item"><strong>Linked user</strong><span>${escapeHtml(row.user_id || 'Not linked')}</span></div>
+        <div class="meta-item"><strong>Created</strong><span>${escapeHtml(formatDate(row.created_at))}</span></div>
+      </div>
+      <div class="action-row">
+        <button class="button danger small" onclick="adminUnbanUser('${row.discord_id || row.user_id}')">Unban user</button>
+      </div>
+    </article>
+  `).join('');
+}
+
 function updateSelects() {
-  const panelScriptSelect = qs('panelScriptId');
+  const scripts = currentData.scripts || [];
+  const panels = currentData.panels || [];
+
+  const panelSelect = qs('panelScriptId');
   const keyPanelSelect = qs('keyPanelId');
 
-  if (panelScriptSelect) {
-    panelScriptSelect.innerHTML = '<option value="">Select script</option>';
-    (currentData.scripts || []).forEach((script) => {
-      panelScriptSelect.innerHTML += `<option value="${escapeHtml(script.id)}">${escapeHtml(script.name)}</option>`;
+  if (panelSelect) {
+    const current = panelSelect.value;
+    panelSelect.innerHTML = '<option value="">Select script</option>';
+    scripts.forEach((script) => {
+      panelSelect.innerHTML += `<option value="${escapeHtml(script.id)}">${escapeHtml(script.name)}</option>`;
     });
+    if ([...panelSelect.options].some((option) => option.value === current)) panelSelect.value = current;
   }
 
   if (keyPanelSelect) {
+    const current = keyPanelSelect.value;
     keyPanelSelect.innerHTML = '<option value="">Select panel</option>';
-    (currentData.panels || []).forEach((panel) => {
+    panels.forEach((panel) => {
       keyPanelSelect.innerHTML += `<option value="${escapeHtml(panel.id)}">${escapeHtml(panel.name)}</option>`;
     });
+    if ([...keyPanelSelect.options].some((option) => option.value === current)) keyPanelSelect.value = current;
   }
 }
 
@@ -1332,7 +1637,10 @@ function renderAll() {
   renderKeys();
   renderHwids();
   updateSelects();
-  if (currentUser.is_owner) renderApiKeys();
+  if (currentUser.is_owner) {
+    renderApiKeys();
+    renderAccessBans();
+  }
 }
 
 async function loadData({ silent = false } = {}) {
@@ -1341,9 +1649,6 @@ async function loadData({ silent = false } = {}) {
     currentData = data;
     serverTime = data.serverTime || Date.now();
     renderAll();
-    if (!silent) {
-      // quiet on manual background refreshes
-    }
   } catch (error) {
     if (!silent) notify('Refresh failed', error.message || 'Unable to load dashboard data.', 'error');
   }
@@ -1355,22 +1660,7 @@ async function loadApiKeys({ silent = true } = {}) {
     apiKeysCache = await requestJSON('/api/admin/api-keys');
     renderApiKeys();
   } catch (error) {
-    if (!silent) notify('API keys failed', error.message || 'Unable to load API keys.', 'error');
-  }
-}
-
-function setView(view) {
-  currentView = view;
-  document.querySelectorAll('.view').forEach((node) => {
-    node.classList.toggle('active', node.id === `view-${view}`);
-  });
-  document.querySelectorAll('.nav-link').forEach((node) => {
-    node.classList.toggle('active', node.dataset.view === view);
-  });
-  qs('pageTitle').textContent = viewTitles[view] || 'Dashboard';
-
-  if (view === 'admin') {
-    loadApiKeys({ silent: true });
+    if (!silent) notify('API key load failed', error.message || 'Unable to load API keys.', 'error');
   }
 }
 
@@ -1379,7 +1669,6 @@ async function submitScript() {
   const code = qs('scriptCode').value;
   const ffaMode = qs('ffaModeCheck').checked;
   const compressMode = qs('compressModeCheck').checked;
-
   if (!name || !code.trim()) {
     notify('Missing fields', 'Enter a script name and source code.', 'error');
     return;
@@ -1396,17 +1685,15 @@ async function submitScript() {
     qs('scriptCode').value = '';
     qs('ffaModeCheck').checked = false;
     qs('compressModeCheck').checked = false;
+    qs('editorFileLabel').textContent = 'untitled.lua';
+    syncEditor();
 
     if (compressMode) {
-      notify('Script saved', 'Script stored successfully. Obfuscation is starting now.');
-      try {
-        await obfuscateScript(data.id, true);
-      } catch {
-        // handled in obfuscateScript
-      }
+      notify('Script saved', 'Script saved successfully. Compression is now running.');
+      await obfuscateScript(data.id, true);
     } else {
-      notify('Script saved', 'The script has been stored successfully.');
       await loadData({ silent: true });
+      notify('Script saved', 'The script has been saved successfully.');
     }
   } catch (error) {
     notify('Save failed', error.message || 'Unable to save script.', 'error');
@@ -1420,12 +1707,10 @@ async function obfuscateScript(scriptId, silent = false) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ scriptId }),
     });
-
     await loadData({ silent: true });
-    if (!silent) notify('Obfuscation complete', 'The selected script was obfuscated successfully.');
-    if (silent) notify('Obfuscation complete', 'The new script was saved and obfuscated successfully.');
+    notify('Compression complete', silent ? 'The saved script was compressed successfully.' : 'Script compressed successfully.');
   } catch (error) {
-    notify('Obfuscation failed', error.message || 'Unable to obfuscate the script.', 'error');
+    notify('Compression failed', error.message || 'Unable to compress the script.', 'error');
     throw error;
   }
 }
@@ -1434,7 +1719,7 @@ async function toggleScript(id) {
   try {
     await requestJSON(`/api/scripts/${id}/toggle`, { method: 'PUT' });
     await loadData({ silent: true });
-    notify('Script updated', 'The script status has been updated.');
+    notify('Script updated', 'Script status updated successfully.');
   } catch (error) {
     notify('Update failed', error.message || 'Unable to update the script.', 'error');
   }
@@ -1444,14 +1729,14 @@ async function toggleFfa(id) {
   try {
     await requestJSON(`/api/scripts/${id}/ffa`, { method: 'PUT' });
     await loadData({ silent: true });
-    notify('Access updated', 'The script access mode has been updated.');
+    notify('Access updated', 'Access mode updated successfully.');
   } catch (error) {
-    notify('Update failed', error.message || 'Unable to update the access mode.', 'error');
+    notify('Update failed', error.message || 'Unable to update access mode.', 'error');
   }
 }
 
 async function deleteScript(id) {
-  if (!window.confirm('Delete this script and all related panels and keys?')) return;
+  if (!confirm('Delete this script and all related keys and panels?')) return;
   try {
     await requestJSON('/api/delete-script', {
       method: 'POST',
@@ -1470,6 +1755,8 @@ async function submitPanel() {
   const description = qs('panelDescription').value.trim();
   const channelId = qs('panelChannelId').value.trim();
   const scriptId = qs('panelScriptId').value;
+  const buyerRoleId = qs('panelBuyerRoleId').value.trim();
+  const freeKeyHours = Number(qs('panelFreeKeyHours').value) || 24;
   const hwidCooldown = Number(qs('panelHwidCooldown').value) || 180;
 
   if (!name || !channelId || !scriptId) {
@@ -1481,17 +1768,16 @@ async function submitPanel() {
     await requestJSON('/api/create-panel', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, description, channelId, scriptId, hwidCooldown }),
+      body: JSON.stringify({ name, description, channelId, scriptId, buyerRoleId, freeKeyHours, hwidCooldown }),
     });
 
-    qs('panelName').value = '';
-    qs('panelDescription').value = '';
-    qs('panelChannelId').value = '';
+    ['panelName', 'panelDescription', 'panelChannelId', 'panelBuyerRoleId'].forEach((id) => { qs(id).value = ''; });
     qs('panelScriptId').value = '';
+    qs('panelFreeKeyHours').value = '24';
     qs('panelHwidCooldown').value = '180';
 
     await loadData({ silent: true });
-    notify('Panel created', 'The panel has been created successfully.');
+    notify('Panel created', 'Discord panel configuration saved.');
   } catch (error) {
     notify('Create failed', error.message || 'Unable to create the panel.', 'error');
   }
@@ -1504,15 +1790,14 @@ async function sendPanel(id) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ panelId: id }),
     });
-    await loadData({ silent: true });
-    notify('Panel sent', 'The panel was sent to Discord successfully.');
+    notify('Panel sent', 'The panel message was sent to Discord successfully.');
   } catch (error) {
     notify('Send failed', error.message || 'Unable to send the panel.', 'error');
   }
 }
 
 async function deletePanel(id) {
-  if (!window.confirm('Delete this panel and its related keys?')) return;
+  if (!confirm('Delete this panel and its keys?')) return;
   try {
     await requestJSON('/api/delete-panel', {
       method: 'POST',
@@ -1520,7 +1805,7 @@ async function deletePanel(id) {
       body: JSON.stringify({ id }),
     });
     await loadData({ silent: true });
-    notify('Panel deleted', 'The panel was removed successfully.');
+    notify('Panel deleted', 'Panel removed successfully.');
   } catch (error) {
     notify('Delete failed', error.message || 'Unable to delete the panel.', 'error');
   }
@@ -1530,6 +1815,8 @@ async function generateKey() {
   const panelId = qs('keyPanelId').value;
   const durationHours = Number(qs('keyDuration').value) || 0;
   const note = qs('keyNote').value.trim();
+  const discordUserId = qs('keyDiscordUserId').value.trim();
+  const discordTag = qs('keyDiscordUserTag').value.trim();
 
   if (!panelId) {
     notify('Panel required', 'Select a panel before generating a key.', 'error');
@@ -1540,22 +1827,21 @@ async function generateKey() {
     const data = await requestJSON('/api/generate-key', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ panelId, durationHours, note }),
+      body: JSON.stringify({ panelId, durationHours, note, discordUserId, discordTag }),
     });
 
+    ['keyDuration', 'keyNote', 'keyDiscordUserId', 'keyDiscordUserTag'].forEach((id) => { qs(id).value = ''; });
     qs('keyPanelId').value = '';
-    qs('keyDuration').value = '';
-    qs('keyNote').value = '';
 
     await loadData({ silent: true });
-    notify('Key generated', `A new key was created: ${data.key}`);
+    notify('Key generated', `New key created: ${data.key}`);
   } catch (error) {
     notify('Generate failed', error.message || 'Unable to generate a key.', 'error');
   }
 }
 
 async function deleteKey(key) {
-  if (!window.confirm('Delete this key?')) return;
+  if (!confirm('Delete this key?')) return;
   try {
     await requestJSON('/api/delete-key', {
       method: 'POST',
@@ -1563,7 +1849,7 @@ async function deleteKey(key) {
       body: JSON.stringify({ key }),
     });
     await loadData({ silent: true });
-    notify('Key deleted', 'The license key was deleted successfully.');
+    notify('Key deleted', 'The key was deleted successfully.');
   } catch (error) {
     notify('Delete failed', error.message || 'Unable to delete the key.', 'error');
   }
@@ -1572,7 +1858,6 @@ async function deleteKey(key) {
 async function banHwid() {
   const hwid = qs('banHwidInput').value.trim();
   const reason = qs('banReason').value.trim();
-
   if (!hwid) {
     notify('HWID required', 'Enter an HWID before saving.', 'error');
     return;
@@ -1584,19 +1869,17 @@ async function banHwid() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ hwid, reason }),
     });
-
     qs('banHwidInput').value = '';
     qs('banReason').value = '';
-
     await loadData({ silent: true });
-    notify('HWID banned', 'The HWID has been added to the block list.');
+    notify('HWID banned', 'HWID added to the blocked list.');
   } catch (error) {
-    notify('Ban failed', error.message || 'Unable to ban the HWID.', 'error');
+    notify('Ban failed', error.message || 'Unable to block the HWID.', 'error');
   }
 }
 
 async function unbanHwid(hwid) {
-  if (!window.confirm('Remove this HWID from the block list?')) return;
+  if (!confirm('Remove this HWID from the blocked list?')) return;
   try {
     await requestJSON('/api/unban-hwid', {
       method: 'POST',
@@ -1604,9 +1887,9 @@ async function unbanHwid(hwid) {
       body: JSON.stringify({ hwid }),
     });
     await loadData({ silent: true });
-    notify('HWID unbanned', 'The HWID was removed from the block list.');
+    notify('HWID removed', 'HWID removed from the blocked list.');
   } catch (error) {
-    notify('Unban failed', error.message || 'Unable to unban the HWID.', 'error');
+    notify('Unban failed', error.message || 'Unable to remove the HWID.', 'error');
   }
 }
 
@@ -1616,9 +1899,8 @@ async function adminGenerateKey() {
   const notes = qs('adminNotes').value.trim();
   const maxScripts = Number(qs('adminMaxScripts').value) || defaults.maxScripts;
   const maxPanels = Number(qs('adminMaxPanels').value) || defaults.maxPanels;
-
   if (!userId) {
-    notify('User required', 'Enter a user ID or Discord ID.', 'error');
+    notify('User required', 'Enter a user or Discord ID.', 'error');
     return;
   }
 
@@ -1628,20 +1910,84 @@ async function adminGenerateKey() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, expiresInDays, notes, maxScripts, maxPanels }),
     });
-
-    qs('adminUserId').value = '';
-    qs('adminExpiresDays').value = '';
-    qs('adminNotes').value = '';
-
+    ['adminUserId', 'adminExpiresDays', 'adminNotes'].forEach((id) => { qs(id).value = ''; });
     await Promise.all([loadData({ silent: true }), loadApiKeys({ silent: true })]);
-    notify('API key generated', `The new API key is ${data.apiKey}`);
+    notify('API key generated', `New API key created: ${data.apiKey}`);
   } catch (error) {
     notify('Generate failed', error.message || 'Unable to generate the API key.', 'error');
   }
 }
 
+function prefillLimitEditor(userId, maxScripts, maxPanels) {
+  qs('limitUserId').value = userId || '';
+  qs('limitMaxScripts').value = Number.isFinite(maxScripts) ? String(maxScripts) : String(defaults.maxScripts);
+  qs('limitMaxPanels').value = Number.isFinite(maxPanels) ? String(maxPanels) : String(defaults.maxPanels);
+  setView('admin');
+  notify('Limit editor ready', 'Selected user loaded into the limit editor.');
+}
+
+async function adminUpdateLimits() {
+  const userId = qs('limitUserId').value.trim();
+  const maxScripts = Number(qs('limitMaxScripts').value);
+  const maxPanels = Number(qs('limitMaxPanels').value);
+  if (!userId) {
+    notify('User required', 'Enter a user ID or Discord ID to update limits.', 'error');
+    return;
+  }
+
+  try {
+    const data = await requestJSON('/api/admin/set-limits', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, maxScripts, maxPanels }),
+    });
+    await Promise.all([loadData({ silent: true }), loadApiKeys({ silent: true })]);
+    notify('Limits updated', `${data.user.username || data.user.discord_id} now has ${data.user.maxScripts} script slots and ${data.user.maxPanels} panel slots.`);
+  } catch (error) {
+    notify('Update failed', error.message || 'Unable to update limits.', 'error');
+  }
+}
+
+async function adminBanUser() {
+  const discordId = qs('banDiscordId').value.trim();
+  const reason = qs('banDiscordReason').value.trim();
+  if (!discordId) {
+    notify('Discord ID required', 'Enter the Discord ID you want to blacklist.', 'error');
+    return;
+  }
+
+  try {
+    await requestJSON('/api/admin/ban-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ discordId, reason }),
+    });
+    qs('banDiscordId').value = '';
+    qs('banDiscordReason').value = '';
+    await loadData({ silent: true });
+    notify('User blacklisted', 'This Discord ID can no longer log into the website until unbanned.');
+  } catch (error) {
+    notify('Blacklist failed', error.message || 'Unable to blacklist this Discord ID.', 'error');
+  }
+}
+
+async function adminUnbanUser(discordId) {
+  if (!confirm('Unban this Discord ID from website access?')) return;
+  try {
+    await requestJSON('/api/admin/unban-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ discordId }),
+    });
+    await loadData({ silent: true });
+    notify('User unbanned', 'Website access restored for that Discord ID.');
+  } catch (error) {
+    notify('Unban failed', error.message || 'Unable to unban this Discord ID.', 'error');
+  }
+}
+
 async function revokeApiKey(key) {
-  if (!window.confirm('Revoke this API key?')) return;
+  if (!confirm('Revoke this API key?')) return;
   try {
     await requestJSON('/api/admin/revoke-key', {
       method: 'POST',
@@ -1653,6 +1999,97 @@ async function revokeApiKey(key) {
   } catch (error) {
     notify('Revoke failed', error.message || 'Unable to revoke the API key.', 'error');
   }
+}
+
+function syncEditor() {
+  const textarea = qs('scriptCode');
+  const linesEl = qs('editorLineNumbers');
+  const lines = Math.max(1, textarea.value.split('\n').length);
+  linesEl.textContent = Array.from({ length: lines }, (_, index) => index + 1).join('\n');
+  linesEl.scrollTop = textarea.scrollTop;
+  qs('editorLines').textContent = `${lines} lines`;
+  qs('editorChars').textContent = `${textarea.value.length} chars`;
+}
+
+function readScriptFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    qs('scriptCode').value = String(reader.result || '');
+    if (!qs('scriptName').value.trim()) {
+      qs('scriptName').value = file.name.replace(/\.[^.]+$/, '');
+    }
+    qs('editorFileLabel').textContent = file.name;
+    syncEditor();
+    notify('File loaded', `${file.name} is ready to save.`);
+  };
+  reader.onerror = () => notify('File read failed', 'Unable to read the selected file.', 'error');
+  reader.readAsText(file);
+}
+
+function attachEditor() {
+  const textarea = qs('scriptCode');
+  const dropZone = qs('editorDropZone');
+  const fileInput = qs('scriptFileInput');
+
+  ['input', 'scroll'].forEach((eventName) => {
+    textarea.addEventListener(eventName, syncEditor);
+  });
+
+  textarea.addEventListener('keydown', (event) => {
+    if (event.key === 'Tab') {
+      event.preventDefault();
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      textarea.value = `${textarea.value.slice(0, start)}  ${textarea.value.slice(end)}`;
+      textarea.selectionStart = textarea.selectionEnd = start + 2;
+      syncEditor();
+    }
+  });
+
+  qs('uploadScriptFileButton')?.addEventListener('click', () => fileInput.click());
+  fileInput?.addEventListener('change', (event) => readScriptFile(event.target.files?.[0]));
+
+  ['dragenter', 'dragover'].forEach((eventName) => {
+    dropZone.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      dropZone.classList.add('editor-drop', 'active');
+    });
+  });
+
+  ['dragleave', 'drop'].forEach((eventName) => {
+    dropZone.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      dropZone.classList.remove('active');
+    });
+  });
+
+  dropZone.addEventListener('drop', (event) => {
+    const file = event.dataTransfer?.files?.[0];
+    if (file) readScriptFile(file);
+  });
+
+  syncEditor();
+}
+
+function attachEvents() {
+  document.querySelectorAll('.nav-link[data-view]').forEach((button) => {
+    button.addEventListener('click', () => setView(button.dataset.view));
+  });
+
+  qs('refreshButton')?.addEventListener('click', async () => {
+    await loadData({ silent: false });
+    if (currentView === 'admin') await loadApiKeys({ silent: false });
+    notify('Dashboard refreshed', 'Latest data loaded successfully.');
+  });
+
+  qs('saveScriptButton')?.addEventListener('click', submitScript);
+  qs('savePanelButton')?.addEventListener('click', submitPanel);
+  qs('generateKeyButton')?.addEventListener('click', generateKey);
+  qs('banHwidButton')?.addEventListener('click', banHwid);
+  qs('adminGenerateKeyButton')?.addEventListener('click', adminGenerateKey);
+  qs('adminUpdateLimitsButton')?.addEventListener('click', adminUpdateLimits);
+  qs('adminBanUserButton')?.addEventListener('click', adminBanUser);
 }
 
 window.submitScript = submitScript;
@@ -1668,27 +2105,16 @@ window.deleteKey = deleteKey;
 window.banHwid = banHwid;
 window.unbanHwid = unbanHwid;
 window.adminGenerateKey = adminGenerateKey;
+window.prefillLimitEditor = prefillLimitEditor;
+window.adminUpdateLimits = adminUpdateLimits;
+window.adminBanUser = adminBanUser;
+window.adminUnbanUser = adminUnbanUser;
 window.revokeApiKey = revokeApiKey;
-
-function attachEvents() {
-  document.querySelectorAll('.nav-link[data-view]').forEach((button) => {
-    button.addEventListener('click', () => setView(button.dataset.view));
-  });
-
-  qs('refreshButton')?.addEventListener('click', async () => {
-    await loadData({ silent: false });
-    if (currentView === 'admin') await loadApiKeys({ silent: false });
-    notify('Dashboard refreshed', 'Latest data has been loaded.');
-  });
-
-  qs('saveScriptButton')?.addEventListener('click', submitScript);
-  qs('savePanelButton')?.addEventListener('click', submitPanel);
-  qs('generateKeyButton')?.addEventListener('click', generateKey);
-  qs('banHwidButton')?.addEventListener('click', banHwid);
-  qs('adminGenerateKeyButton')?.addEventListener('click', adminGenerateKey);
-}
+window.copyText = copyText;
 
 attachEvents();
+attachEditor();
+setPageMeta('scripts');
 loadData({ silent: true });
 if (currentUser.is_owner) loadApiKeys({ silent: true });
 
@@ -1744,9 +2170,19 @@ function wantsJson(req) {
 }
 
 function requireAuth(req, res, next) {
-  if (req.session.user) return next();
-  if (wantsJson(req)) return res.status(401).json({ error: 'Unauthorized' });
-  return res.redirect('/');
+  if (!req.session.user) {
+    if (wantsJson(req)) return res.status(401).json({ error: 'Unauthorized' });
+    return res.redirect('/');
+  }
+
+  const banReason = assertNotAccessBanned(req.session.user.discord_id, req.session.user.id);
+  if (banReason) {
+    req.session.destroy(() => {});
+    if (wantsJson(req)) return res.status(403).json({ error: banReason });
+    return res.status(403).send(banReason);
+  }
+
+  return next();
 }
 
 function requireOwner(req, res, next) {
@@ -1792,6 +2228,145 @@ function canCreateScript(userId) {
 function canCreatePanel(userId) {
   const limits = getUserLimits(userId);
   return getPanelCount(userId) < limits.max_panels;
+}
+
+function getScriptById(scriptId) {
+  return db.prepare('SELECT * FROM scripts WHERE id = ?').get(scriptId);
+}
+
+function getScriptByPublicId(publicId) {
+  return db.prepare('SELECT * FROM scripts WHERE public_id = ?').get(publicId);
+}
+
+function getPanelById(panelId) {
+  return db.prepare('SELECT * FROM panels WHERE id = ?').get(panelId);
+}
+
+function buildHostedLoaderUrl(publicId) {
+  return `${publicBaseUrl()}/scripts/hosted/${publicId}.lua`;
+}
+
+function buildRawScriptUrl(publicId) {
+  return `${publicBaseUrl()}/scripts/raw/${publicId}.lua`;
+}
+
+function buildLoaderSnippet(script) {
+  if (!script.public_id) {
+    db.prepare('UPDATE scripts SET public_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(makePublicId(), script.id);
+    script = getScriptById(script.id);
+  }
+
+  if (script.ffa_mode) {
+    return `loadstring(game:HttpGet("${buildHostedLoaderUrl(script.public_id)}"))()`;
+  }
+
+  return [
+    'script_key = "YOUR_KEY_HERE"',
+    '',
+    `loadstring(game:HttpGet("${buildHostedLoaderUrl(script.public_id)}"))()`,
+  ].join('\n');
+}
+
+function createLicenseKeyRecord({ scriptId, panelId = null, userId, note = '', expiresAt = null, claimedBy = null, claimedTag = null }) {
+  const id = makeId('key');
+  const key = generateLicenseKey();
+  db.prepare(
+    `INSERT INTO license_keys (id, script_id, panel_id, user_id, key, note, expires_at, claimed_by, claimed_tag)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(id, scriptId, panelId, userId, key, note, expiresAt, claimedBy, claimedTag);
+  return db.prepare('SELECT * FROM license_keys WHERE id = ?').get(id);
+}
+
+function getLatestActiveClaimedKey(scriptId, discordUserId) {
+  const rows = db.prepare(
+    `SELECT * FROM license_keys
+     WHERE script_id = ? AND claimed_by = ?
+     ORDER BY created_at DESC`
+  ).all(scriptId, discordUserId);
+  return rows.find((row) => !isExpired(row.expires_at)) || null;
+}
+
+function ensureWhitelistAccess({ ownerUserId, scriptId, discordUserId, discordTag }) {
+  let whitelist = db.prepare(
+    'SELECT * FROM script_whitelist WHERE script_id = ? AND discord_user_id = ?'
+  ).get(scriptId, discordUserId);
+
+  if (whitelist?.granted_key) {
+    const existingKey = db.prepare('SELECT * FROM license_keys WHERE key = ?').get(whitelist.granted_key);
+    if (existingKey && !isExpired(existingKey.expires_at)) {
+      if (!existingKey.claimed_by) {
+        db.prepare('UPDATE license_keys SET claimed_by = ?, claimed_tag = ? WHERE key = ?').run(discordUserId, discordTag, existingKey.key);
+      }
+      return existingKey;
+    }
+  }
+
+  const newKey = createLicenseKeyRecord({
+    scriptId,
+    userId: ownerUserId,
+    note: `Whitelist for ${discordTag}`,
+    expiresAt: null,
+    claimedBy: discordUserId,
+    claimedTag: discordTag,
+  });
+
+  if (whitelist) {
+    db.prepare(
+      'UPDATE script_whitelist SET discord_tag = ?, granted_key = ? WHERE id = ?'
+    ).run(discordTag, newKey.key, whitelist.id);
+  } else {
+    db.prepare(
+      `INSERT INTO script_whitelist (id, script_id, owner_user_id, discord_user_id, discord_tag, granted_key)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(makeId('wl'), scriptId, ownerUserId, discordUserId, discordTag, newKey.key);
+  }
+
+  return newKey;
+}
+
+function canDiscordUserAccessScript(scriptId, discordUserId) {
+  if (!discordUserId) return false;
+  const key = getLatestActiveClaimedKey(scriptId, discordUserId);
+  if (key) return true;
+  const whitelist = db.prepare(
+    'SELECT * FROM script_whitelist WHERE script_id = ? AND discord_user_id = ?'
+  ).get(scriptId, discordUserId);
+  return Boolean(whitelist);
+}
+
+function buildPanelEmbed(panel, script) {
+  return new EmbedBuilder()
+    .setColor(BRAND_COLOR)
+    .setTitle(panel.name)
+    .setDescription(panel.description || 'Secure script access panel')
+    .addFields(
+      { name: 'Script', value: script.name, inline: true },
+      { name: 'Status', value: script.status === 'active' ? 'Active' : 'Disabled', inline: true },
+      { name: 'Version', value: script.version || '1.0.0', inline: true }
+    )
+    .setFooter({ text: 'LuaObfuscationHub | v5' });
+}
+
+function buildPanelComponents(panel) {
+  const row1 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`panelview_${panel.id}`).setLabel('View Script').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`panelredeem_${panel.id}`).setLabel('Redeem Key').setStyle(ButtonStyle.Success)
+  );
+
+  const row2 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`panelkeyinfo_${panel.id}`).setLabel('Key Info').setStyle(ButtonStyle.Secondary)
+  );
+
+  const row3 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`panelbuyerrole_${panel.id}`).setLabel('Get Buyer Role').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`panelfreekey_${panel.id}`).setLabel('Free Key').setStyle(ButtonStyle.Secondary)
+  );
+
+  const row4 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`panelresethwid_${panel.id}`).setLabel('Reset HWID').setStyle(ButtonStyle.Danger)
+  );
+
+  return [row1, row2, row3, row4];
 }
 
 async function obfuscateScript(code) {
@@ -1840,6 +2415,8 @@ function authenticateApiKey(req, res, next) {
   db.prepare('UPDATE api_keys SET last_used_at = CURRENT_TIMESTAMP WHERE key = ?').run(apiKey);
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(keyRecord.owner_id);
   if (!user) return res.status(401).json({ error: 'User not found' });
+  const banReason = assertNotAccessBanned(user.discord_id, user.id);
+  if (banReason) return res.status(403).json({ error: banReason });
 
   req.apiUser = user;
   req.apiKey = keyRecord;
@@ -1971,6 +2548,11 @@ app.get('/auth/discord/callback', async (req, res) => {
     });
     const oauthUser = await userResponse.json();
     if (!userResponse.ok) throw new Error('Failed to fetch Discord user');
+
+    const banReason = assertNotAccessBanned(oauthUser.id);
+    if (banReason) {
+      return res.status(403).send(banReason);
+    }
 
     let dbUser = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(oauthUser.id);
 
@@ -2132,6 +2714,44 @@ app.get('/api/admin/api-keys', requireOwner, (req, res) => {
   res.json(keys);
 });
 
+app.get('/api/admin/access-bans', requireOwner, (req, res) => {
+  const rows = db.prepare(
+    `SELECT ab.*, u.username AS user_username, u.discord_id AS linked_discord_id
+     FROM access_bans ab
+     LEFT JOIN users u ON ab.user_id = u.id
+     ORDER BY ab.created_at DESC`
+  ).all();
+  res.json(rows);
+});
+
+app.post('/api/admin/ban-user', requireOwner, (req, res) => {
+  const discordId = String(req.body.discordId || '').trim();
+  const reason = String(req.body.reason || '').trim();
+  if (!discordId) return res.status(400).json({ error: 'Discord ID required' });
+
+  const linkedUser = db.prepare('SELECT * FROM users WHERE discord_id = ? OR id = ?').get(discordId, discordId);
+  const existing = getAccessBan(discordId, linkedUser?.id || null);
+  if (existing) return res.json({ success: true, alreadyBanned: true });
+
+  db.prepare(
+    `INSERT INTO access_bans (id, discord_id, user_id, reason, banned_by)
+     VALUES (?, ?, ?, ?, ?)`
+  ).run(makeId('ban'), linkedUser?.discord_id || discordId, linkedUser?.id || null, reason || 'Blacklisted from website access', req.session.user.id);
+
+  res.json({ success: true });
+});
+
+app.post('/api/admin/unban-user', requireOwner, (req, res) => {
+  const discordId = String(req.body.discordId || '').trim();
+  if (!discordId) return res.status(400).json({ error: 'Discord ID required' });
+  db.prepare('DELETE FROM access_bans WHERE discord_id = ?').run(discordId);
+  const linkedUser = db.prepare('SELECT * FROM users WHERE discord_id = ? OR id = ?').get(discordId, discordId);
+  if (linkedUser) {
+    db.prepare('DELETE FROM access_bans WHERE user_id = ?').run(linkedUser.id);
+  }
+  res.json({ success: true });
+});
+
 app.post('/api/admin/revoke-key', requireOwner, (req, res) => {
   const { key } = req.body;
   if (!key) return res.status(400).json({ error: 'Key required' });
@@ -2149,6 +2769,9 @@ app.post('/api/login', (req, res) => {
 
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(keyRecord.owner_id);
   if (!user) return res.status(401).json({ error: 'User not found' });
+
+  const banReason = assertNotAccessBanned(user.discord_id, user.id);
+  if (banReason) return res.status(403).json({ error: banReason });
 
   db.prepare('UPDATE api_keys SET last_used_at = CURRENT_TIMESTAMP WHERE key = ?').run(apiKey);
   req.session.user = normalizeUserSession(user);
@@ -2188,10 +2811,11 @@ app.post('/api/create-script', requireAuth, (req, res) => {
   }
 
   const id = makeId('script');
+  const publicId = makePublicId();
   db.prepare(
-    `INSERT INTO scripts (id, user_id, name, code, obfuscated_code, ffa_mode, compress_mode)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
-  ).run(id, user.id, name, code, null, ffaMode ? 1 : 0, compressMode ? 1 : 0);
+    `INSERT INTO scripts (id, user_id, name, code, obfuscated_code, public_id, ffa_mode, compress_mode)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(id, user.id, name, code, null, publicId, ffaMode ? 1 : 0, compressMode ? 1 : 0);
 
   res.json({
     success: true,
@@ -2226,6 +2850,7 @@ app.post('/api/delete-script', requireAuth, (req, res) => {
   db.prepare('DELETE FROM scripts WHERE id = ? AND user_id = ?').run(id, req.session.user.id);
   db.prepare('DELETE FROM panels WHERE script_id = ? AND user_id = ?').run(id, req.session.user.id);
   db.prepare('DELETE FROM license_keys WHERE script_id = ? AND user_id = ?').run(id, req.session.user.id);
+  db.prepare('DELETE FROM script_whitelist WHERE script_id = ? AND owner_user_id = ?').run(id, req.session.user.id);
 
   res.json({ success: true });
 });
@@ -2266,6 +2891,8 @@ app.post('/api/create-panel', requireAuth, (req, res) => {
   const description = String(req.body.description || '').trim();
   const channelId = String(req.body.channelId || '').trim();
   const scriptId = String(req.body.scriptId || '').trim();
+  const buyerRoleId = String(req.body.buyerRoleId || '').trim();
+  const freeKeyHours = Math.max(0, Number(req.body.freeKeyHours) || 24);
   const hwidCooldown = Math.max(0, Number(req.body.hwidCooldown) || 180);
 
   if (!name || !channelId || !scriptId) {
@@ -2277,9 +2904,9 @@ app.post('/api/create-panel', requireAuth, (req, res) => {
 
   const id = makeId('panel');
   db.prepare(
-    `INSERT INTO panels (id, user_id, name, description, channel_id, script_id, hwid_cooldown)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
-  ).run(id, user.id, name, description, channelId, scriptId, hwidCooldown);
+    `INSERT INTO panels (id, user_id, name, description, channel_id, script_id, buyer_role_id, free_key_hours, hwid_cooldown)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(id, user.id, name, description, channelId, scriptId, buyerRoleId, freeKeyHours, hwidCooldown);
 
   res.json({ success: true, id, remaining: getRemainingLimits(user.id) });
 });
@@ -2317,30 +2944,8 @@ app.post('/api/send-panel', requireAuth, async (req, res) => {
     if (!channel) return res.status(404).json({ error: 'Discord channel not found or inaccessible' });
     if (!channel.isTextBased()) return res.status(400).json({ error: 'Selected channel is not a text channel' });
 
-    const embed = new EmbedBuilder()
-      .setColor(BRAND_COLOR)
-      .setTitle(panel.name)
-      .setDescription(panel.description || 'Lua script access panel')
-      .addFields(
-        { name: 'Script', value: script.name, inline: true },
-        { name: 'Status', value: script.status === 'active' ? 'Active' : 'Disabled', inline: true },
-        { name: 'HWID Cooldown', value: `${panel.hwid_cooldown}s`, inline: true },
-        { name: 'Access', value: script.ffa_mode ? 'Open' : 'Key required', inline: true }
-      )
-      .setFooter({ text: 'LuaObfuscationHub' })
-      .setTimestamp();
-
-    const row1 = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`view_${script.id}`).setLabel('View script').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId(`redeem_${script.id}`).setLabel('Redeem key').setStyle(ButtonStyle.Success)
-    );
-
-    const row2 = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`loader_${script.id}`).setLabel('Loader').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`keys_${script.id}`).setLabel('Keys').setStyle(ButtonStyle.Secondary)
-    );
-
-    await channel.send({ embeds: [embed], components: [row1, row2] });
+    const embed = buildPanelEmbed(panel, script);
+    await channel.send({ embeds: [embed], components: buildPanelComponents(panel) });
     res.json({ success: true });
   } catch (error) {
     console.error('Send panel error:', error);
@@ -2349,25 +2954,28 @@ app.post('/api/send-panel', requireAuth, async (req, res) => {
 });
 
 app.post('/api/generate-key', requireAuth, (req, res) => {
-  const { panelId, durationHours, note } = req.body;
+  const { panelId, durationHours, note, discordUserId, discordTag } = req.body;
   if (!panelId) return res.status(400).json({ error: 'Panel ID required' });
 
   const user = req.session.user;
   const panel = db.prepare('SELECT * FROM panels WHERE id = ? AND user_id = ?').get(panelId, user.id);
   if (!panel) return res.status(404).json({ error: 'Panel not found' });
 
-  const key = generateLicenseKey();
   const expiresAt = Number(durationHours) > 0
     ? new Date(Date.now() + Number(durationHours) * 3600000).toISOString()
     : null;
-  const id = makeId('key');
 
-  db.prepare(
-    `INSERT INTO license_keys (id, script_id, panel_id, user_id, key, note, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
-  ).run(id, panel.script_id, panel.id, user.id, key, note || '', expiresAt);
+  const row = createLicenseKeyRecord({
+    scriptId: panel.script_id,
+    panelId: panel.id,
+    userId: user.id,
+    note: note || '',
+    expiresAt,
+    claimedBy: discordUserId || null,
+    claimedTag: discordTag || null,
+  });
 
-  res.json({ success: true, key, expiresAt });
+  res.json({ success: true, key: row.key, expiresAt, claimedBy: row.claimed_by || null });
 });
 
 app.post('/api/delete-key', requireAuth, (req, res) => {
@@ -2406,6 +3014,9 @@ app.get('/api/data', requireAuth, (req, res) => {
   const bannedHWIDs = user.is_owner
     ? db.prepare('SELECT * FROM banned_hwids ORDER BY created_at DESC').all()
     : db.prepare('SELECT * FROM banned_hwids WHERE banned_by = ? ORDER BY created_at DESC').all(user.id);
+  const accessBans = user.is_owner
+    ? db.prepare('SELECT * FROM access_bans ORDER BY created_at DESC').all()
+    : [];
   const limits = getRemainingLimits(user.id);
 
   res.json({
@@ -2413,16 +3024,13 @@ app.get('/api/data', requireAuth, (req, res) => {
     panels,
     keys,
     bannedHWIDs,
+    accessBans,
     limits,
     serverTime: Date.now(),
   });
 });
 
-app.get('/script/:scriptId', (req, res) => {
-  const { scriptId } = req.params;
-  const { key, hwid } = req.query;
-
-  const script = db.prepare('SELECT * FROM scripts WHERE id = ?').get(scriptId);
+function sendScriptContent(script, key, hwid, res) {
   if (!script) return res.status(404).type('text/plain').send('-- Script not found');
   if (script.status === 'disabled') return res.status(403).type('text/plain').send('-- Script disabled');
 
@@ -2432,7 +3040,7 @@ app.get('/script/:scriptId', (req, res) => {
 
   if (!key) return res.status(403).type('text/plain').send('-- Missing key');
 
-  const keyRecord = db.prepare('SELECT * FROM license_keys WHERE key = ? AND script_id = ?').get(key, scriptId);
+  const keyRecord = db.prepare('SELECT * FROM license_keys WHERE key = ? AND script_id = ?').get(key, script.id);
   if (!keyRecord) return res.status(403).type('text/plain').send('-- Invalid key');
   if (isExpired(keyRecord.expires_at)) return res.status(403).type('text/plain').send('-- Key expired');
 
@@ -2446,31 +3054,61 @@ app.get('/script/:scriptId', (req, res) => {
   }
 
   if (hwid && !keyRecord.hwid) {
-    db.prepare('UPDATE license_keys SET hwid = ?, last_used_at = CURRENT_TIMESTAMP WHERE key = ?').run(hwid, key);
+    db.prepare('UPDATE license_keys SET hwid = ?, last_used_at = CURRENT_TIMESTAMP WHERE key = ?').run(hwid, keyRecord.key);
   } else {
-    db.prepare('UPDATE license_keys SET last_used_at = CURRENT_TIMESTAMP WHERE key = ?').run(key);
+    db.prepare('UPDATE license_keys SET last_used_at = CURRENT_TIMESTAMP WHERE key = ?').run(keyRecord.key);
   }
 
   return res.type('text/plain').send(script.obfuscated_code || script.code || '-- Empty');
+}
+
+function buildHostedLoaderSource(script) {
+  const rawUrl = buildRawScriptUrl(script.public_id);
+  if (script.ffa_mode) {
+    return `loadstring(game:HttpGet("${rawUrl}"))()`;
+  }
+
+  return [
+    'local env = _G',
+    'if getgenv then env = getgenv() end',
+    'local key = env.script_key',
+    'assert(key and tostring(key) ~= "", "Missing script_key")',
+    'local HttpService = game:GetService("HttpService")',
+    'local hwid = HttpService:GenerateGUID(false)',
+    `loadstring(game:HttpGet("${rawUrl}?key=" .. tostring(key) .. "&hwid=" .. hwid))()`,
+  ].join('\n');
+}
+
+app.get('/scripts/raw/:publicId.lua', (req, res) => {
+  const { publicId } = req.params;
+  const { key, hwid } = req.query;
+  const script = getScriptByPublicId(publicId);
+  return sendScriptContent(script, key, hwid, res);
+});
+
+app.get('/scripts/hosted/:publicId.lua', (req, res) => {
+  const { publicId } = req.params;
+  const script = getScriptByPublicId(publicId);
+  if (!script) return res.status(404).type('text/plain').send('-- Script not found');
+  if (script.status === 'disabled') return res.status(403).type('text/plain').send('-- Script disabled');
+  return res.type('text/plain').send(buildHostedLoaderSource(script));
+});
+
+app.get('/script/:scriptId', (req, res) => {
+  const { scriptId } = req.params;
+  const { key, hwid } = req.query;
+  return sendScriptContent(getScriptById(scriptId), key, hwid, res);
 });
 
 app.get('/loader/:scriptId', (req, res) => {
   const { scriptId } = req.params;
-  const script = db.prepare('SELECT * FROM scripts WHERE id = ?').get(scriptId);
-
+  const script = getScriptById(scriptId);
   if (!script) return res.status(404).type('text/plain').send('-- Script not found');
-  if (script.status === 'disabled') return res.status(403).type('text/plain').send('-- Script disabled');
-
-  const baseUrl = publicBaseUrl();
-  if (script.ffa_mode) {
-    return res.type('text/plain').send(`loadstring(game:HttpGet("${baseUrl}/script/${scriptId}"))()`);
+  if (!script.public_id) {
+    db.prepare('UPDATE scripts SET public_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(makePublicId(), script.id);
   }
-
-  return res.type('text/plain').send([
-    '-- This script requires a key',
-    `script_key = "YOUR_KEY_HERE"`,
-    `loadstring(game:HttpGet("${baseUrl}/script/${scriptId}?key=" .. script_key .. "&hwid=" .. game:GetService("HttpService"):GenerateGUID(false)))()`,
-  ].join('\n'));
+  const freshScript = getScriptById(scriptId);
+  return res.type('text/plain').send(buildHostedLoaderSource(freshScript));
 });
 
 function pageShell({ title, body, appData = null, inlineScript = '' }) {
@@ -2504,25 +3142,41 @@ app.get('/', (req, res) => {
           <div class="brand-mark">L</div>
           <div>
             <p class="eyebrow">LuaObfuscationHub</p>
-            <h1>LuaObfuscationHub</h1>
-            <p class="muted">Cyberpunk-grade Lua protection</p>
+            <h1 class="hero-title">Modern script hosting with a cleaner workflow</h1>
+            <p class="hero-subtitle">Manage scripts, panels, buyer roles, loadstrings, HWID access, and compression from a single dashboard.</p>
           </div>
         </div>
 
-        <div class="stack-lg">
-          <div class="field">
-            <label for="apiKeyInput">API Key</label>
-            <input id="apiKeyInput" type="text" placeholder="Enter your API Key" autocomplete="off" />
+        <div class="auth-grid">
+          <div class="auth-panel stack-lg">
+            <div class="field">
+              <label for="apiKeyInput">API key</label>
+              <input id="apiKeyInput" type="text" placeholder="Enter your API key" autocomplete="off" />
+            </div>
+            <button id="apiLoginButton" class="button primary full-width">Login with API key</button>
+            <div class="divider"><span>or</span></div>
+            <a class="button secondary full-width" href="/auth/discord">Continue with Discord</a>
+            <p class="helper-text">Need access? Request an API key from the server owner.</p>
           </div>
 
-          <button id="apiLoginButton" class="button primary">Login with API Key</button>
-
-          <div class="divider"><span>or</span></div>
-
-          <a class="button secondary full-width" href="/auth/discord">Login with Discord</a>
+          <aside class="feature-panel stack">
+            <div class="feature-title">Included</div>
+            <div class="feature-list">
+              <div class="feature-item">
+                <div class="feature-title">Hosted loader paths</div>
+                <div class="helper-text">Key-based loadstrings with hosted file paths and compression support.</div>
+              </div>
+              <div class="feature-item">
+                <div class="feature-title">Discord access panels</div>
+                <div class="helper-text">Panels with key redemption, buyer role, free key, and HWID reset buttons.</div>
+              </div>
+              <div class="feature-item">
+                <div class="feature-title">Better mobile layout</div>
+                <div class="helper-text">Responsive workspace cards, sidebar navigation, and a script editor designed for phones.</div>
+              </div>
+            </div>
+          </aside>
         </div>
-
-        <p class="helper-text">Need an API key? Contact the owner.</p>
       </section>
     </main>`;
 
@@ -2543,7 +3197,7 @@ app.get('/dashboard', requireAuth, (req, res) => {
           <div class="brand-mark small">L</div>
           <div>
             <div class="brand-name">LuaObfuscationHub</div>
-            <div class="sidebar-caption">Cyberpunk control panel</div>
+            <div class="sidebar-caption">Hosted script control center</div>
           </div>
         </div>
 
@@ -2551,29 +3205,33 @@ app.get('/dashboard', requireAuth, (req, res) => {
           <img src="${escapeHtml(buildAvatarUrl(user))}" alt="Avatar" class="avatar" />
           <div>
             <div class="user-name">${escapeHtml(user.username)}</div>
-            <div class="user-role">${user.is_owner ? '👑 Owner' : 'User'}</div>
+            <div class="user-role">${user.is_owner ? 'Owner account' : 'Standard account'}</div>
           </div>
         </div>
 
         <nav class="nav-list">
-          <button class="nav-link active" data-view="scripts">📜 Scripts</button>
-          <button class="nav-link" data-view="panels">📋 Panels</button>
-          <button class="nav-link" data-view="keys">🔑 Keys</button>
-          <button class="nav-link" data-view="hwids">🚫 HWID Bans</button>
-          ${user.is_owner ? '<button class="nav-link" data-view="admin">⚙️ Admin Panel</button>' : ''}
+          <button class="nav-link active" data-view="scripts">Scripts</button>
+          <button class="nav-link" data-view="panels">Panels</button>
+          <button class="nav-link" data-view="keys">Keys</button>
+          <button class="nav-link" data-view="hwids">HWID bans</button>
+          ${user.is_owner ? '<button class="nav-link" data-view="admin">Admin</button>' : ''}
         </nav>
 
         <div class="sidebar-footer">
-          <a class="button secondary full-width" href="/logout">🚪 Logout</a>
+          <div class="auth-panel stack">
+            <div class="feature-title">Workspace</div>
+            <div class="helper-text">Your existing scripts and keys remain stored in the SQLite database used by this server.</div>
+          </div>
+          <a class="button secondary full-width" href="/logout">Logout</a>
         </div>
       </aside>
 
       <main class="content-area">
         <header class="topbar panel">
-          <div>
+          <div class="stack">
             <p class="eyebrow">Dashboard</p>
-            <h1 id="pageTitle">📜 Scripts</h1>
-            <p class="muted">Manage hosting, access, keys, panels, and obfuscation.</p>
+            <h1 class="page-title" id="pageTitle">Scripts</h1>
+            <p class="muted" id="pageSubtitle">Manage hosted scripts, loadstrings, compression, and upload flow.</p>
           </div>
           <div class="topbar-actions">
             <button class="button secondary" id="refreshButton">Refresh</button>
@@ -2581,26 +3239,26 @@ app.get('/dashboard', requireAuth, (req, res) => {
           </div>
         </header>
 
-        <section class="stats-grid" id="statsGrid">
+        <section class="stats-grid">
           <article class="stat-card panel">
-            <span class="stat-label">📜 Scripts</span>
+            <span class="stat-label">Scripts</span>
             <strong class="stat-value" id="statScripts">0</strong>
             <span class="stat-meta" id="statScriptsMeta">0 remaining</span>
           </article>
           <article class="stat-card panel">
-            <span class="stat-label">📋 Panels</span>
+            <span class="stat-label">Panels</span>
             <strong class="stat-value" id="statPanels">0</strong>
             <span class="stat-meta" id="statPanelsMeta">0 remaining</span>
           </article>
           <article class="stat-card panel">
-            <span class="stat-label">🔑 License Keys</span>
+            <span class="stat-label">Keys</span>
             <strong class="stat-value" id="statKeys">0</strong>
-            <span class="stat-meta" id="statKeysMeta">Active inventory</span>
+            <span class="stat-meta" id="statKeysMeta">0 active</span>
           </article>
           <article class="stat-card panel">
-            <span class="stat-label">🚫 Banned HWIDs</span>
+            <span class="stat-label">HWID bans</span>
             <strong class="stat-value" id="statHwids">0</strong>
-            <span class="stat-meta" id="statHwidsMeta">Current blocks</span>
+            <span class="stat-meta" id="statHwidsMeta">Current entries</span>
           </article>
         </section>
 
@@ -2608,36 +3266,51 @@ app.get('/dashboard', requireAuth, (req, res) => {
           <div class="panel section-card">
             <div class="section-header">
               <div>
-                <h2>📜 Upload Script</h2>
-                <p class="muted">Save your Lua source and optionally obfuscate it after upload.</p>
+                <h2>Script workspace</h2>
+                <p class="muted">Paste code, upload a file, and host a new script with compression support.</p>
               </div>
+              <span class="count-badge" id="scriptsCount">0 items</span>
             </div>
+
             <div class="form-grid two">
               <div class="field">
                 <label for="scriptName">Script name</label>
-                <input id="scriptName" type="text" placeholder="Example: Main loader" />
+                <input id="scriptName" type="text" placeholder="Main loader" />
               </div>
-              <div class="field checkbox-group">
-                <label class="check"><input id="ffaModeCheck" type="checkbox" /> 🔓 FFA Mode (No key required)</label>
-                <label class="check"><input id="compressModeCheck" type="checkbox" /> 🔮 Auto-Obfuscate</label>
+              <div class="toggle-grid">
+                <label class="switch-card"><input id="ffaModeCheck" type="checkbox" /> <span>Open access mode</span></label>
+                <label class="switch-card"><input id="compressModeCheck" type="checkbox" /> <span>Compress on save</span></label>
               </div>
               <div class="field full">
-                <label for="scriptCode">Source code</label>
-                <textarea id="scriptCode" rows="12" class="mono" placeholder="Paste your Lua code here"></textarea>
+                <label for="scriptCode">Script source</label>
+                <div class="editor-card">
+                  <div class="editor-toolbar">
+                    <span class="editor-chip" id="editorFileLabel">untitled.lua</span>
+                    <div class="editor-meta">
+                      <span class="kbd-hint" id="editorLines">1 lines</span>
+                      <span class="kbd-hint" id="editorChars">0 chars</span>
+                    </div>
+                  </div>
+                  <div class="editor-shell" id="editorDropZone">
+                    <pre id="editorLineNumbers" class="editor-lines">1</pre>
+                    <textarea id="scriptCode" class="editor-textarea" spellcheck="false" placeholder="Paste your Lua or Luau source here"></textarea>
+                  </div>
+                  <div class="editor-actions">
+                    <div class="action-row">
+                      <button class="button secondary" id="uploadScriptFileButton" type="button">Upload file</button>
+                      <input id="scriptFileInput" type="file" accept=".lua,.luau,.txt,.json,.js,.ts" class="hidden" />
+                    </div>
+                    <span class="editor-subtext">Drag and drop a source file here or paste directly into the editor.</span>
+                  </div>
+                </div>
               </div>
             </div>
+
             <div class="form-actions">
-              <button class="button primary" id="saveScriptButton">⚡ Host Script</button>
+              <button class="button primary" id="saveScriptButton">Save script</button>
             </div>
           </div>
 
-          <div class="section-header inline-header">
-            <div>
-              <h2>Your Scripts</h2>
-              <p class="muted">Saved scripts, loaders, and access settings.</p>
-            </div>
-            <span class="count-badge" id="scriptsCount">0 items</span>
-          </div>
           <div id="scriptsList" class="resource-grid"></div>
         </section>
 
@@ -2645,44 +3318,48 @@ app.get('/dashboard', requireAuth, (req, res) => {
           <div class="panel section-card">
             <div class="section-header">
               <div>
-                <h2>📋 Create Panel</h2>
-                <p class="muted">Choose a script and send a Discord access panel to a channel.</p>
+                <h2>Discord panel builder</h2>
+                <p class="muted">Create a panel that sends the modern button layout for script access, keys, buyer role, and HWID reset.</p>
               </div>
+              <span class="count-badge" id="panelsCount">0 items</span>
             </div>
-            <div class="form-grid two">
+
+            <div class="form-grid three">
               <div class="field">
                 <label for="panelName">Panel name</label>
-                <input id="panelName" type="text" placeholder="Example: Main access panel" />
+                <input id="panelName" type="text" placeholder="Release panel" />
               </div>
               <div class="field">
                 <label for="panelChannelId">Discord channel ID</label>
                 <input id="panelChannelId" type="text" placeholder="123456789012345678" />
               </div>
-              <div class="field full">
-                <label for="panelDescription">Description</label>
-                <textarea id="panelDescription" rows="4" placeholder="Optional description shown in Discord"></textarea>
-              </div>
               <div class="field">
                 <label for="panelScriptId">Script</label>
                 <select id="panelScriptId"><option value="">Select script</option></select>
               </div>
+              <div class="field full">
+                <label for="panelDescription">Description</label>
+                <textarea id="panelDescription" rows="4" placeholder="Short release notes or panel copy"></textarea>
+              </div>
               <div class="field">
-                <label for="panelHwidCooldown">HWID cooldown (seconds)</label>
-                <input id="panelHwidCooldown" type="number" value="180" min="0" />
+                <label for="panelBuyerRoleId">Buyer role ID</label>
+                <input id="panelBuyerRoleId" type="text" placeholder="Optional Discord role ID" />
+              </div>
+              <div class="field">
+                <label for="panelFreeKeyHours">Free key duration</label>
+                <input id="panelFreeKeyHours" type="number" min="0" value="24" placeholder="Hours, 0 disables" />
+              </div>
+              <div class="field">
+                <label for="panelHwidCooldown">HWID reset cooldown</label>
+                <input id="panelHwidCooldown" type="number" min="0" value="180" placeholder="Seconds" />
               </div>
             </div>
+
             <div class="form-actions">
-              <button class="button primary" id="savePanelButton">⚡ Create Panel</button>
+              <button class="button primary" id="savePanelButton">Create panel</button>
             </div>
           </div>
 
-          <div class="section-header inline-header">
-            <div>
-              <h2>Your panels</h2>
-              <p class="muted">Panels linked to Discord channels.</p>
-            </div>
-            <span class="count-badge" id="panelsCount">0 items</span>
-          </div>
           <div id="panelsList" class="resource-grid"></div>
         </section>
 
@@ -2690,11 +3367,13 @@ app.get('/dashboard', requireAuth, (req, res) => {
           <div class="panel section-card">
             <div class="section-header">
               <div>
-                <h2>🔑 Generate License Key</h2>
-                <p class="muted">Issue a license key for a panel with an optional expiration window.</p>
+                <h2>Key manager</h2>
+                <p class="muted">Create keys manually, optionally assign them to a Discord user, and manage existing access.</p>
               </div>
+              <span class="count-badge" id="keysCount">0 items</span>
             </div>
-            <div class="form-grid two">
+
+            <div class="form-grid three">
               <div class="field">
                 <label for="keyPanelId">Panel</label>
                 <select id="keyPanelId"><option value="">Select panel</option></select>
@@ -2703,23 +3382,25 @@ app.get('/dashboard', requireAuth, (req, res) => {
                 <label for="keyDuration">Duration in hours</label>
                 <input id="keyDuration" type="number" min="0" placeholder="0 for permanent" />
               </div>
+              <div class="field">
+                <label for="keyDiscordUserId">Discord user ID</label>
+                <input id="keyDiscordUserId" type="text" placeholder="Optional assignment" />
+              </div>
+              <div class="field">
+                <label for="keyDiscordUserTag">Discord tag</label>
+                <input id="keyDiscordUserTag" type="text" placeholder="Optional tag for display" />
+              </div>
               <div class="field full">
                 <label for="keyNote">Note</label>
-                <input id="keyNote" type="text" placeholder="Optional note" />
+                <input id="keyNote" type="text" placeholder="Internal note or buyer reference" />
               </div>
             </div>
+
             <div class="form-actions">
-              <button class="button primary" id="generateKeyButton">⚡ Generate Key</button>
+              <button class="button primary" id="generateKeyButton">Generate key</button>
             </div>
           </div>
 
-          <div class="section-header inline-header">
-            <div>
-              <h2>Your keys</h2>
-              <p class="muted">View status, expiration, and claim state.</p>
-            </div>
-            <span class="count-badge" id="keysCount">0 items</span>
-          </div>
           <div id="keysList" class="resource-grid"></div>
         </section>
 
@@ -2727,32 +3408,28 @@ app.get('/dashboard', requireAuth, (req, res) => {
           <div class="panel section-card">
             <div class="section-header">
               <div>
-                <h2>🚫 Ban HWID</h2>
-                <p class="muted">Block a device identifier from using protected scripts.</p>
+                <h2>HWID enforcement</h2>
+                <p class="muted">Add or remove blocked hardware identifiers that should not load protected scripts.</p>
               </div>
+              <span class="count-badge" id="hwidsCount">0 items</span>
             </div>
+
             <div class="form-grid two">
               <div class="field">
                 <label for="banHwidInput">HWID</label>
-                <input id="banHwidInput" type="text" placeholder="Paste HWID" />
+                <input id="banHwidInput" type="text" placeholder="Paste HWID value" />
               </div>
               <div class="field">
                 <label for="banReason">Reason</label>
                 <input id="banReason" type="text" placeholder="Optional reason" />
               </div>
             </div>
+
             <div class="form-actions">
-              <button class="button primary" id="banHwidButton">🚫 Ban</button>
+              <button class="button primary" id="banHwidButton">Block HWID</button>
             </div>
           </div>
 
-          <div class="section-header inline-header">
-            <div>
-              <h2>Banned HWIDs</h2>
-              <p class="muted">Review blocked identifiers.</p>
-            </div>
-            <span class="count-badge" id="hwidsCount">0 items</span>
-          </div>
           <div id="hwidList" class="resource-grid"></div>
         </section>
 
@@ -2761,10 +3438,12 @@ app.get('/dashboard', requireAuth, (req, res) => {
           <div class="panel section-card">
             <div class="section-header">
               <div>
-                <h2>⚙️ Admin Panel</h2>
-                <p class="muted">Generate API keys and assign access limits.</p>
+                <h2>Admin tools</h2>
+                <p class="muted">Create API keys, edit user limits higher or lower, and blacklist users from website access.</p>
               </div>
+              <span class="count-badge" id="apiKeysCount">0 items</span>
             </div>
+
             <div class="form-grid two">
               <div class="field">
                 <label for="adminUserId">User ID or Discord ID</label>
@@ -2787,19 +3466,63 @@ app.get('/dashboard', requireAuth, (req, res) => {
                 <input id="adminNotes" type="text" placeholder="Optional note" />
               </div>
             </div>
+
             <div class="form-actions">
-              <button class="button primary" id="adminGenerateKeyButton">⚡ Generate API Key</button>
+              <button class="button primary" id="adminGenerateKeyButton">Generate API key</button>
             </div>
           </div>
 
-          <div class="section-header inline-header">
-            <div>
-              <h2>API keys</h2>
-              <p class="muted">Monitor active and revoked keys.</p>
+          <div class="panel section-card">
+            <div class="section-header">
+              <div>
+                <h2>Edit user limits</h2>
+                <p class="muted">Raise or lower how many scripts and panels a user account can create.</p>
+              </div>
             </div>
-            <span class="count-badge" id="apiKeysCount">0 items</span>
+            <div class="form-grid three">
+              <div class="field">
+                <label for="limitUserId">User ID or Discord ID</label>
+                <input id="limitUserId" type="text" placeholder="User ID or Discord ID" />
+              </div>
+              <div class="field">
+                <label for="limitMaxScripts">Max scripts</label>
+                <input id="limitMaxScripts" type="number" min="0" value="${DEFAULT_MAX_SCRIPTS}" />
+              </div>
+              <div class="field">
+                <label for="limitMaxPanels">Max panels</label>
+                <input id="limitMaxPanels" type="number" min="0" value="${DEFAULT_MAX_PANELS}" />
+              </div>
+            </div>
+            <div class="form-actions">
+              <button class="button secondary" id="adminUpdateLimitsButton">Update limits</button>
+            </div>
           </div>
+
+          <div class="panel section-card">
+            <div class="section-header">
+              <div>
+                <h2>Website access blacklist</h2>
+                <p class="muted">Ban a Discord ID from logging into the website until it is removed.</p>
+              </div>
+              <span class="count-badge" id="accessBansCount">0 items</span>
+            </div>
+            <div class="form-grid two">
+              <div class="field">
+                <label for="banDiscordId">Discord ID</label>
+                <input id="banDiscordId" type="text" placeholder="Discord ID to blacklist" />
+              </div>
+              <div class="field">
+                <label for="banDiscordReason">Reason</label>
+                <input id="banDiscordReason" type="text" placeholder="Optional ban reason" />
+              </div>
+            </div>
+            <div class="form-actions">
+              <button class="button danger" id="adminBanUserButton">Blacklist user</button>
+            </div>
+          </div>
+
           <div id="apiKeysList" class="resource-grid"></div>
+          <div id="accessBansList" class="resource-grid"></div>
         </section>` : ''}
       </main>
     </div>
@@ -2853,7 +3576,36 @@ async function registerCommands() {
       .setDescription('Generate a license key')
       .addStringOption((option) => option.setName('panel_id').setDescription('Panel ID').setRequired(true))
       .addIntegerOption((option) => option.setName('hours').setDescription('Duration in hours (0 = permanent)').setRequired(true))
-      .addStringOption((option) => option.setName('note').setDescription('Optional note')),
+      .addStringOption((option) => option.setName('note').setDescription('Optional note'))
+      .addUserOption((option) => option.setName('user').setDescription('Assign the key to a Discord user').setRequired(false)),
+    new SlashCommandBuilder()
+      .setName('setbuyerrole')
+      .setDescription('Set the buyer role for a panel')
+      .addStringOption((option) => option.setName('panel_id').setDescription('Panel ID').setRequired(true))
+      .addRoleOption((option) => option.setName('role').setDescription('Role to assign').setRequired(true)),
+    new SlashCommandBuilder()
+      .setName('whitelist')
+      .setDescription('Whitelist a Discord user to a script')
+      .addStringOption((option) => option.setName('script_id').setDescription('Script ID').setRequired(true))
+      .addUserOption((option) => option.setName('user').setDescription('User to whitelist').setRequired(true)),
+    new SlashCommandBuilder()
+      .setName('banuser')
+      .setDescription('Blacklist a Discord ID from logging into the website')
+      .addStringOption((option) => option.setName('discord_id').setDescription('Discord ID to ban').setRequired(true))
+      .addStringOption((option) => option.setName('reason').setDescription('Optional reason').setRequired(false)),
+    new SlashCommandBuilder()
+      .setName('unbanuser')
+      .setDescription('Remove a Discord ID from the website blacklist')
+      .addStringOption((option) => option.setName('discord_id').setDescription('Discord ID to unban').setRequired(true)),
+    new SlashCommandBuilder()
+      .setName('banhwid')
+      .setDescription('Ban a hardware ID from script use')
+      .addStringOption((option) => option.setName('hwid').setDescription('HWID to ban').setRequired(true))
+      .addStringOption((option) => option.setName('reason').setDescription('Optional reason').setRequired(false)),
+    new SlashCommandBuilder()
+      .setName('unbanhwid')
+      .setDescription('Remove a hardware ID ban')
+      .addStringOption((option) => option.setName('hwid').setDescription('HWID to unban').setRequired(true)),
     new SlashCommandBuilder()
       .setName('loader')
       .setDescription('Get the loader for a script')
@@ -2888,29 +3640,153 @@ client.once('ready', () => {
 
 client.on('interactionCreate', async (interaction) => {
   try {
-    if (interaction.isModalSubmit() && interaction.customId.startsWith('redeem_')) {
-      const scriptId = interaction.customId.slice('redeem_'.length);
-      const input = interaction.fields.getTextInputValue('key_input').toUpperCase().trim();
-      const keyRecord = db.prepare('SELECT * FROM license_keys WHERE key = ? AND script_id = ?').get(input, scriptId);
+    if (interaction.isModalSubmit()) {
+      if (interaction.customId.startsWith('redeempanel_')) {
+        const panelId = interaction.customId.slice('redeempanel_'.length);
+        const panel = getPanelById(panelId);
+        if (!panel) return interaction.reply({ content: 'Panel not found.', ephemeral: true });
 
-      if (!keyRecord) {
-        return interaction.reply({ content: 'Invalid license key.', ephemeral: true });
-      }
-      if (isExpired(keyRecord.expires_at)) {
-        return interaction.reply({ content: 'This key has expired.', ephemeral: true });
-      }
-      if (keyRecord.claimed_by) {
-        return interaction.reply({ content: 'This key has already been claimed.', ephemeral: true });
+        const input = interaction.fields.getTextInputValue('key_input').toUpperCase().trim();
+        const keyRecord = db.prepare('SELECT * FROM license_keys WHERE key = ? AND script_id = ?').get(input, panel.script_id);
+
+        if (!keyRecord) return interaction.reply({ content: 'Invalid license key.', ephemeral: true });
+        if (isExpired(keyRecord.expires_at)) return interaction.reply({ content: 'This key has expired.', ephemeral: true });
+        if (keyRecord.claimed_by && keyRecord.claimed_by !== interaction.user.id) {
+          return interaction.reply({ content: 'This key has already been claimed by another user.', ephemeral: true });
+        }
+
+        db.prepare(
+          'UPDATE license_keys SET claimed_by = ?, claimed_tag = ?, last_used_at = CURRENT_TIMESTAMP WHERE key = ?'
+        ).run(interaction.user.id, interaction.user.tag, input);
+
+        return interaction.reply({ content: `Key redeemed successfully.\n\n${buildLoaderSnippet(getScriptById(panel.script_id))}`, ephemeral: true });
       }
 
-      db.prepare(
-        'UPDATE license_keys SET claimed_by = ?, claimed_tag = ?, last_used_at = CURRENT_TIMESTAMP WHERE key = ?'
-      ).run(interaction.user.id, interaction.user.tag, input);
+      if (interaction.customId.startsWith('redeem_')) {
+        const scriptId = interaction.customId.slice('redeem_'.length);
+        const input = interaction.fields.getTextInputValue('key_input').toUpperCase().trim();
+        const keyRecord = db.prepare('SELECT * FROM license_keys WHERE key = ? AND script_id = ?').get(input, scriptId);
 
-      return interaction.reply({ content: `License key ${input} redeemed successfully.`, ephemeral: true });
+        if (!keyRecord) return interaction.reply({ content: 'Invalid license key.', ephemeral: true });
+        if (isExpired(keyRecord.expires_at)) return interaction.reply({ content: 'This key has expired.', ephemeral: true });
+        if (keyRecord.claimed_by && keyRecord.claimed_by !== interaction.user.id) {
+          return interaction.reply({ content: 'This key has already been claimed by another user.', ephemeral: true });
+        }
+
+        db.prepare(
+          'UPDATE license_keys SET claimed_by = ?, claimed_tag = ?, last_used_at = CURRENT_TIMESTAMP WHERE key = ?'
+        ).run(interaction.user.id, interaction.user.tag, input);
+
+        return interaction.reply({ content: `Key redeemed successfully.`, ephemeral: true });
+      }
     }
 
     if (interaction.isButton()) {
+      if (interaction.customId.startsWith('panel')) {
+        const separator = interaction.customId.indexOf('_');
+        const action = interaction.customId.slice(5, separator);
+        const panelId = interaction.customId.slice(separator + 1);
+        const panel = getPanelById(panelId);
+        if (!panel) return interaction.reply({ content: 'Panel not found.', ephemeral: true });
+        const script = getScriptById(panel.script_id);
+        if (!script) return interaction.reply({ content: 'Script not found.', ephemeral: true });
+
+        if (action === 'view') {
+          const embed = buildPanelEmbed(panel, script)
+            .addFields(
+              { name: 'Access', value: script.ffa_mode ? 'Open access' : 'Key required', inline: true },
+              { name: 'Compression', value: script.compress_mode ? 'Enabled' : 'Disabled', inline: true },
+              { name: 'Hosted Loader', value: `\`\`\`lua\n${buildLoaderSnippet(script)}\n\`\`\``, inline: false }
+            );
+          return interaction.reply({ embeds: [embed], ephemeral: true });
+        }
+
+        if (action === 'redeem') {
+          const modal = new ModalBuilder().setCustomId(`redeempanel_${panel.id}`).setTitle('Redeem Key');
+          modal.addComponents(
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder()
+                .setCustomId('key_input')
+                .setLabel('Enter your key')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true)
+                .setPlaceholder('ABCD1234EFGH5678')
+            )
+          );
+          return interaction.showModal(modal);
+        }
+
+        if (action === 'keyinfo') {
+          const message = script.ffa_mode
+            ? `This script is using open access.\n\n${buildLoaderSnippet(script)}`
+            : `This script uses the key system. Set your key first, then run the hosted loader.\n\n${buildLoaderSnippet(script)}`;
+          return interaction.reply({ content: message, ephemeral: true });
+        }
+
+        if (action === 'buyerrole') {
+          if (!interaction.inGuild()) {
+            return interaction.reply({ content: 'This button only works inside a server.', ephemeral: true });
+          }
+          if (!panel.buyer_role_id) {
+            return interaction.reply({ content: 'No buyer role has been configured for this panel.', ephemeral: true });
+          }
+          if (!canDiscordUserAccessScript(script.id, interaction.user.id)) {
+            return interaction.reply({ content: 'You need a valid key or whitelist entry before claiming the buyer role.', ephemeral: true });
+          }
+
+          const member = await interaction.guild.members.fetch(interaction.user.id);
+          await member.roles.add(panel.buyer_role_id);
+          return interaction.reply({ content: 'Buyer role granted successfully.', ephemeral: true });
+        }
+
+        if (action === 'freekey') {
+          if (Number(panel.free_key_hours || 0) <= 0) {
+            return interaction.reply({ content: 'Free keys are disabled for this panel.', ephemeral: true });
+          }
+
+          const existing = getLatestActiveClaimedKey(script.id, interaction.user.id);
+          if (existing) {
+            return interaction.reply({ content: `You already have an active key: ${existing.key}\n\n${buildLoaderSnippet(script)}`, ephemeral: true });
+          }
+
+          const expiresAt = new Date(Date.now() + Number(panel.free_key_hours) * 3600000).toISOString();
+          const row = createLicenseKeyRecord({
+            scriptId: script.id,
+            panelId: panel.id,
+            userId: panel.user_id,
+            note: `Free key issued to ${interaction.user.tag}`,
+            expiresAt,
+            claimedBy: interaction.user.id,
+            claimedTag: interaction.user.tag,
+          });
+
+          return interaction.reply({
+            content: `Free key generated: ${row.key}\nExpires: ${new Date(expiresAt).toLocaleString()}\n\n${buildLoaderSnippet(script)}`,
+            ephemeral: true,
+          });
+        }
+
+        if (action === 'resethwid') {
+          const key = getLatestActiveClaimedKey(script.id, interaction.user.id);
+          if (!key) {
+            return interaction.reply({ content: 'No active claimed key was found for your account.', ephemeral: true });
+          }
+
+          if (key.last_hwid_reset_at) {
+            const nextAllowed = new Date(key.last_hwid_reset_at).getTime() + Number(panel.hwid_cooldown || 0) * 1000;
+            if (nextAllowed > Date.now()) {
+              const remaining = Math.ceil((nextAllowed - Date.now()) / 1000);
+              return interaction.reply({ content: `Please wait ${remaining}s before resetting HWID again.`, ephemeral: true });
+            }
+          }
+
+          db.prepare(
+            'UPDATE license_keys SET hwid = NULL, last_hwid_reset_at = CURRENT_TIMESTAMP WHERE key = ?'
+          ).run(key.key);
+          return interaction.reply({ content: 'HWID has been reset for your active key.', ephemeral: true });
+        }
+      }
+
       const [action, ...restParts] = interaction.customId.split('_');
       const scriptId = restParts.join('_');
       if (!scriptId) {
@@ -2918,7 +3794,7 @@ client.on('interactionCreate', async (interaction) => {
       }
 
       if (action === 'view') {
-        const script = db.prepare('SELECT * FROM scripts WHERE id = ?').get(scriptId);
+        const script = getScriptById(scriptId);
         if (!script) return interaction.reply({ content: 'Script not found.', ephemeral: true });
 
         const embed = new EmbedBuilder()
@@ -2926,8 +3802,8 @@ client.on('interactionCreate', async (interaction) => {
           .setTitle(script.name)
           .addFields(
             { name: 'Status', value: script.status === 'active' ? 'Active' : 'Disabled', inline: true },
-            { name: 'Free access', value: script.ffa_mode ? 'Yes' : 'No', inline: true },
-            { name: 'Obfuscated', value: script.obfuscated_code ? 'Yes' : 'No', inline: true }
+            { name: 'Access', value: script.ffa_mode ? 'Open access' : 'Key required', inline: true },
+            { name: 'Compression', value: script.compress_mode ? 'Enabled' : 'Disabled', inline: true }
           )
           .setFooter({ text: 'LuaObfuscationHub' });
 
@@ -2935,12 +3811,12 @@ client.on('interactionCreate', async (interaction) => {
       }
 
       if (action === 'redeem') {
-        const modal = new ModalBuilder().setCustomId(`redeem_${scriptId}`).setTitle('Redeem license key');
+        const modal = new ModalBuilder().setCustomId(`redeem_${scriptId}`).setTitle('Redeem Key');
         modal.addComponents(
           new ActionRowBuilder().addComponents(
             new TextInputBuilder()
               .setCustomId('key_input')
-              .setLabel('License key')
+              .setLabel('Enter your key')
               .setStyle(TextInputStyle.Short)
               .setRequired(true)
               .setPlaceholder('ABCD1234EFGH5678')
@@ -2950,40 +3826,28 @@ client.on('interactionCreate', async (interaction) => {
       }
 
       if (action === 'loader') {
-        const script = db.prepare('SELECT * FROM scripts WHERE id = ?').get(scriptId);
+        const script = getScriptById(scriptId);
         if (!script) return interaction.reply({ content: 'Script not found.', ephemeral: true });
-
-        const baseUrl = publicBaseUrl();
-        const loader = script.ffa_mode
-          ? `loadstring(game:HttpGet("${baseUrl}/loader/${scriptId}"))()`
-          : `script_key = "YOUR_KEY_HERE"\nloadstring(game:HttpGet("${baseUrl}/script/${scriptId}?key=" .. script_key .. "&hwid=" .. game:GetService("HttpService"):GenerateGUID(false)))()`;
-
-        return interaction.reply({ content: `\`\`\`lua\n${loader}\n\`\`\``, ephemeral: true });
+        return interaction.reply({ content: `\`\`\`lua\n${buildLoaderSnippet(script)}\n\`\`\``, ephemeral: true });
       }
 
       if (action === 'keys') {
-        const script = db.prepare('SELECT * FROM scripts WHERE id = ?').get(scriptId);
+        const script = getScriptById(scriptId);
         if (!script) return interaction.reply({ content: 'Script not found.', ephemeral: true });
 
         const owner = db.prepare('SELECT discord_id FROM users WHERE id = ?').get(script.user_id);
         const isOwnerViewer = interaction.user.id === OWNER_ID || interaction.user.id === owner?.discord_id;
-
         if (!isOwnerViewer) {
-          const message = script.ffa_mode
-            ? 'This script is configured for open access and does not require a key.'
-            : 'Keys are private. Use the redeem button if you already have one or contact the script owner.';
-          return interaction.reply({ content: message, ephemeral: true });
+          return interaction.reply({ content: 'Keys are private to the script owner.', ephemeral: true });
         }
 
-        const recentKeys = db
-          .prepare(
-            `SELECT key, note, expires_at, claimed_tag, created_at
-             FROM license_keys
-             WHERE script_id = ?
-             ORDER BY created_at DESC
-             LIMIT 10`
-          )
-          .all(scriptId);
+        const recentKeys = db.prepare(
+          `SELECT key, note, expires_at, claimed_tag, created_at
+           FROM license_keys
+           WHERE script_id = ?
+           ORDER BY created_at DESC
+           LIMIT 10`
+        ).all(scriptId);
 
         if (!recentKeys.length) {
           return interaction.reply({ content: 'No license keys exist for this script yet.', ephemeral: true });
@@ -2995,8 +3859,7 @@ client.on('interactionCreate', async (interaction) => {
             : row.claimed_tag
               ? `Claimed by ${row.claimed_tag}`
               : 'Available';
-          const note = row.note ? ` | ${row.note}` : '';
-          return `${row.key} | ${status}${note}`;
+          return `${row.key} | ${status}${row.note ? ` | ${row.note}` : ''}`;
         });
 
         return interaction.reply({ content: `\`\`\`\n${lines.join('\n')}\n\`\`\``, ephemeral: true });
@@ -3033,9 +3896,7 @@ client.on('interactionCreate', async (interaction) => {
 
       if (command === 'limits') {
         const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(interaction.user.id);
-        if (!user) {
-          return interaction.reply({ content: 'No linked dashboard account was found for this Discord user.', ephemeral: true });
-        }
+        if (!user) return interaction.reply({ content: 'No linked dashboard account was found for this Discord user.', ephemeral: true });
 
         const limits = getRemainingLimits(user.id);
         const embed = new EmbedBuilder()
@@ -3055,113 +3916,161 @@ client.on('interactionCreate', async (interaction) => {
       if (command === 'panel') {
         const panelId = interaction.options.getString('panel_id', true);
         const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(interaction.user.id);
-        if (!user) {
-          return interaction.reply({ content: 'No linked dashboard account was found for this Discord user.', ephemeral: true });
-        }
+        if (!user) return interaction.reply({ content: 'No linked dashboard account was found for this Discord user.', ephemeral: true });
 
         const panel = db.prepare('SELECT * FROM panels WHERE id = ? AND user_id = ?').get(panelId, user.id);
         if (!panel) return interaction.reply({ content: 'Panel not found.', ephemeral: true });
-
-        const script = db.prepare('SELECT * FROM scripts WHERE id = ?').get(panel.script_id);
+        const script = getScriptById(panel.script_id);
         if (!script) return interaction.reply({ content: 'Script not found.', ephemeral: true });
+        if (!interaction.channel || !interaction.channel.isTextBased()) {
+          return interaction.reply({ content: 'This command must be used in a text channel.', ephemeral: true });
+        }
 
-        const embed = new EmbedBuilder()
-          .setColor(BRAND_COLOR)
-          .setTitle(panel.name)
-          .setDescription(panel.description || 'Lua script access panel')
-          .addFields(
-            { name: 'Script', value: script.name, inline: true },
-            { name: 'Status', value: script.status === 'active' ? 'Active' : 'Disabled', inline: true },
-            { name: 'Access', value: script.ffa_mode ? 'Open' : 'Key required', inline: true }
-          )
-          .setFooter({ text: 'LuaObfuscationHub' });
-
-        const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId(`view_${script.id}`).setLabel('View script').setStyle(ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId(`redeem_${script.id}`).setLabel('Redeem key').setStyle(ButtonStyle.Success),
-          new ButtonBuilder().setCustomId(`loader_${script.id}`).setLabel('Loader').setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId(`keys_${script.id}`).setLabel('Keys').setStyle(ButtonStyle.Secondary)
-        );
-
-        return interaction.reply({ embeds: [embed], components: [row] });
+        await interaction.channel.send({ embeds: [buildPanelEmbed(panel, script)], components: buildPanelComponents(panel) });
+        return interaction.reply({ content: 'Panel sent to this channel.', ephemeral: true });
       }
 
       if (command === 'generatekey') {
         const panelId = interaction.options.getString('panel_id', true);
         const hours = interaction.options.getInteger('hours', true);
         const note = interaction.options.getString('note') || '';
+        const targetUser = interaction.options.getUser('user');
 
         const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(interaction.user.id);
-        if (!user) {
-          return interaction.reply({ content: 'No linked dashboard account was found for this Discord user.', ephemeral: true });
-        }
+        if (!user) return interaction.reply({ content: 'No linked dashboard account was found for this Discord user.', ephemeral: true });
 
         const panel = db.prepare('SELECT * FROM panels WHERE id = ? AND user_id = ?').get(panelId, user.id);
         if (!panel) return interaction.reply({ content: 'Panel not found.', ephemeral: true });
 
-        const key = generateLicenseKey();
         const expiresAt = hours > 0 ? new Date(Date.now() + hours * 3600000).toISOString() : null;
-        const id = makeId('key');
-
-        db.prepare(
-          `INSERT INTO license_keys (id, script_id, panel_id, user_id, key, note, expires_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`
-        ).run(id, panel.script_id, panel.id, user.id, key, note, expiresAt);
+        const row = createLicenseKeyRecord({
+          scriptId: panel.script_id,
+          panelId: panel.id,
+          userId: user.id,
+          note,
+          expiresAt,
+          claimedBy: targetUser?.id || null,
+          claimedTag: targetUser ? targetUser.tag : null,
+        });
 
         return interaction.reply({
-          content: `Generated key: ${key}\n${expiresAt ? `Expires: ${new Date(expiresAt).toLocaleString()}` : 'Permanent key'}`,
+          content: `Generated key: ${row.key}\n${targetUser ? `Assigned to: ${targetUser.tag}\n` : ''}${expiresAt ? `Expires: ${new Date(expiresAt).toLocaleString()}` : 'Permanent key'}`,
           ephemeral: true,
         });
       }
 
+      if (command === 'setbuyerrole') {
+        const panelId = interaction.options.getString('panel_id', true);
+        const role = interaction.options.getRole('role', true);
+        const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(interaction.user.id);
+        if (!user) return interaction.reply({ content: 'No linked dashboard account was found for this Discord user.', ephemeral: true });
+
+        const panel = getPanelById(panelId);
+        if (!panel || panel.user_id !== user.id) return interaction.reply({ content: 'Panel not found.', ephemeral: true });
+        db.prepare('UPDATE panels SET buyer_role_id = ? WHERE id = ?').run(role.id, panelId);
+        return interaction.reply({ content: `Buyer role set to ${role.name} for panel ${panel.name}.`, ephemeral: true });
+      }
+
+      if (command === 'whitelist') {
+        const scriptId = interaction.options.getString('script_id', true);
+        const targetUser = interaction.options.getUser('user', true);
+        const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(interaction.user.id);
+        if (!user) return interaction.reply({ content: 'No linked dashboard account was found for this Discord user.', ephemeral: true });
+
+        const script = getScriptById(scriptId);
+        if (!script || script.user_id !== user.id) return interaction.reply({ content: 'Script not found.', ephemeral: true });
+
+        const row = ensureWhitelistAccess({
+          ownerUserId: user.id,
+          scriptId,
+          discordUserId: targetUser.id,
+          discordTag: targetUser.tag,
+        });
+
+        return interaction.reply({
+          content: `Whitelisted ${targetUser.tag} to ${script.name}.\nAssigned key: ${row.key}`,
+          ephemeral: true,
+        });
+      }
+
+      if (command === 'banuser') {
+        if (interaction.user.id !== OWNER_ID) {
+          return interaction.reply({ content: 'Only the owner can blacklist website users.', ephemeral: true });
+        }
+        const discordId = interaction.options.getString('discord_id', true);
+        const reason = interaction.options.getString('reason') || 'Blacklisted from website access';
+        const linkedUser = db.prepare('SELECT * FROM users WHERE discord_id = ? OR id = ?').get(discordId, discordId);
+        const existing = getAccessBan(discordId, linkedUser?.id || null);
+        const actingUser = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(interaction.user.id);
+        if (!existing) {
+          db.prepare(
+            `INSERT INTO access_bans (id, discord_id, user_id, reason, banned_by)
+             VALUES (?, ?, ?, ?, ?)`
+          ).run(makeId('ban'), linkedUser?.discord_id || discordId, linkedUser?.id || null, reason, actingUser?.id || null);
+        }
+        return interaction.reply({ content: `Website access blacklisted for ${discordId}.`, ephemeral: true });
+      }
+
+      if (command === 'unbanuser') {
+        if (interaction.user.id !== OWNER_ID) {
+          return interaction.reply({ content: 'Only the owner can unban website users.', ephemeral: true });
+        }
+        const discordId = interaction.options.getString('discord_id', true);
+        db.prepare('DELETE FROM access_bans WHERE discord_id = ?').run(discordId);
+        const linkedUser = db.prepare('SELECT * FROM users WHERE discord_id = ? OR id = ?').get(discordId, discordId);
+        if (linkedUser) db.prepare('DELETE FROM access_bans WHERE user_id = ?').run(linkedUser.id);
+        return interaction.reply({ content: `Website access restored for ${discordId}.`, ephemeral: true });
+      }
+
+      if (command === 'banhwid') {
+        const hwid = interaction.options.getString('hwid', true).trim();
+        const reason = interaction.options.getString('reason') || '';
+        const websiteUser = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(interaction.user.id);
+        const bannedBy = websiteUser?.id || null;
+        db.prepare('INSERT OR REPLACE INTO banned_hwids (hwid, reason, banned_by) VALUES (?, ?, ?)').run(hwid, reason, bannedBy);
+        return interaction.reply({ content: `HWID ${hwid} has been banned.`, ephemeral: true });
+      }
+
+      if (command === 'unbanhwid') {
+        const hwid = interaction.options.getString('hwid', true).trim();
+        db.prepare('DELETE FROM banned_hwids WHERE hwid = ?').run(hwid);
+        return interaction.reply({ content: `HWID ${hwid} has been unbanned.`, ephemeral: true });
+      }
+
       if (command === 'loader') {
         const scriptId = interaction.options.getString('script_id', true);
-        const script = db.prepare('SELECT * FROM scripts WHERE id = ?').get(scriptId);
+        const script = getScriptById(scriptId);
         if (!script) return interaction.reply({ content: 'Script not found.', ephemeral: true });
-
-        const baseUrl = publicBaseUrl();
-        const loader = script.ffa_mode
-          ? `loadstring(game:HttpGet("${baseUrl}/loader/${scriptId}"))()`
-          : `script_key = "YOUR_KEY_HERE"\nloadstring(game:HttpGet("${baseUrl}/script/${scriptId}?key=" .. script_key .. "&hwid=" .. game:GetService("HttpService"):GenerateGUID(false)))()`;
-
-        return interaction.reply({ content: `\`\`\`lua\n${loader}\n\`\`\``, ephemeral: true });
+        return interaction.reply({ content: `\`\`\`lua\n${buildLoaderSnippet(script)}\n\`\`\``, ephemeral: true });
       }
 
       if (command === 'keys') {
         const panelId = interaction.options.getString('panel_id');
         const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(interaction.user.id);
-        if (!user) {
-          return interaction.reply({ content: 'No linked dashboard account was found for this Discord user.', ephemeral: true });
-        }
+        if (!user) return interaction.reply({ content: 'No linked dashboard account was found for this Discord user.', ephemeral: true });
 
         let rows;
         if (panelId) {
           const panel = db.prepare('SELECT * FROM panels WHERE id = ? AND user_id = ?').get(panelId, user.id);
           if (!panel) return interaction.reply({ content: 'Panel not found.', ephemeral: true });
-          rows = db
-            .prepare(
-              `SELECT key, note, expires_at, claimed_tag, created_at
-               FROM license_keys
-               WHERE user_id = ? AND panel_id = ?
-               ORDER BY created_at DESC
-               LIMIT 10`
-            )
-            .all(user.id, panelId);
+          rows = db.prepare(
+            `SELECT key, note, expires_at, claimed_tag, created_at
+             FROM license_keys
+             WHERE user_id = ? AND panel_id = ?
+             ORDER BY created_at DESC
+             LIMIT 10`
+          ).all(user.id, panelId);
         } else {
-          rows = db
-            .prepare(
-              `SELECT key, note, expires_at, claimed_tag, created_at
-               FROM license_keys
-               WHERE user_id = ?
-               ORDER BY created_at DESC
-               LIMIT 10`
-            )
-            .all(user.id);
+          rows = db.prepare(
+            `SELECT key, note, expires_at, claimed_tag, created_at
+             FROM license_keys
+             WHERE user_id = ?
+             ORDER BY created_at DESC
+             LIMIT 10`
+          ).all(user.id);
         }
 
-        if (!rows.length) {
-          return interaction.reply({ content: 'No license keys were found.', ephemeral: true });
-        }
+        if (!rows.length) return interaction.reply({ content: 'No license keys were found.', ephemeral: true });
 
         const lines = rows.map((row) => {
           const status = isExpired(row.expires_at)
