@@ -1,12 +1,11 @@
 {
   "name": "lua-obfuscation-hub",
   "version": "2.0.0",
-  "description": "Cyberpunk-styled Discord bot + web panel for Lua script protection and obfuscation",
+  "description": "Cyberpunk Lua protection system",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js",
-    "railway": "npm start"
+    "build": "npm install"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -19,20 +18,5 @@
     "form-data": "^4.0.0",
     "multer": "^1.4.5-lts.1",
     "node-fetch": "^2.7.0"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.1"
-  },
-  "keywords": [
-    "discord-bot",
-    "roblox",
-    "lua-obfuscator",
-    "script-protection",
-    "hwid",
-    "license-system",
-    "cyberpunk",
-    "railway"
-  ],
-  "author": "LuaObfuscationHub",
-  "license": "MIT"
+  }
 }
