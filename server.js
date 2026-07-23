@@ -997,25 +997,25 @@ app.get('/', (req, res) => {
           <div class="brand-mark">L</div>
           <div>
             <p class="eyebrow">LuaObfuscationHub</p>
-            <h1>Secure Lua hosting with a cleaner dashboard</h1>
-            <p class="muted">Sign in with an API key or Discord to manage scripts, panels, license keys, and obfuscation.</p>
+            <h1>LuaObfuscationHub</h1>
+            <p class="muted">Cyberpunk-grade Lua protection</p>
           </div>
         </div>
 
         <div class="stack-lg">
           <div class="field">
-            <label for="apiKeyInput">API key</label>
-            <input id="apiKeyInput" type="text" placeholder="Enter your API key" autocomplete="off" />
+            <label for="apiKeyInput">API Key</label>
+            <input id="apiKeyInput" type="text" placeholder="Enter your API Key" autocomplete="off" />
           </div>
 
-          <button id="apiLoginButton" class="button primary">Sign in with API key</button>
+          <button id="apiLoginButton" class="button primary">Login with API Key</button>
 
           <div class="divider"><span>or</span></div>
 
-          <a class="button secondary full-width" href="/auth/discord">Continue with Discord</a>
+          <a class="button secondary full-width" href="/auth/discord">Login with Discord</a>
         </div>
 
-        <p class="helper-text">If you need access, request an API key from the account owner.</p>
+        <p class="helper-text">Need an API key? Contact the owner.</p>
       </section>
     </main>`;
 
@@ -1032,7 +1032,7 @@ app.get('/dashboard', requireAuth, (req, res) => {
           <div class="brand-mark small">L</div>
           <div>
             <div class="brand-name">LuaObfuscationHub</div>
-            <div class="sidebar-caption">Control panel</div>
+            <div class="sidebar-caption">Cyberpunk control panel</div>
           </div>
         </div>
 
@@ -1040,20 +1040,20 @@ app.get('/dashboard', requireAuth, (req, res) => {
           <img src="${escapeHtml(buildAvatarUrl(user))}" alt="Avatar" class="avatar" />
           <div>
             <div class="user-name">${escapeHtml(user.username)}</div>
-            <div class="user-role">${user.is_owner ? 'Owner' : 'User'}</div>
+            <div class="user-role">${user.is_owner ? '👑 Owner' : 'User'}</div>
           </div>
         </div>
 
         <nav class="nav-list">
-          <button class="nav-link active" data-view="scripts">Scripts</button>
-          <button class="nav-link" data-view="panels">Panels</button>
-          <button class="nav-link" data-view="keys">Keys</button>
-          <button class="nav-link" data-view="hwids">HWID bans</button>
-          ${user.is_owner ? '<button class="nav-link" data-view="admin">Admin</button>' : ''}
+          <button class="nav-link active" data-view="scripts">📜 Scripts</button>
+          <button class="nav-link" data-view="panels">📋 Panels</button>
+          <button class="nav-link" data-view="keys">🔑 Keys</button>
+          <button class="nav-link" data-view="hwids">🚫 HWID Bans</button>
+          ${user.is_owner ? '<button class="nav-link" data-view="admin">⚙️ Admin Panel</button>' : ''}
         </nav>
 
         <div class="sidebar-footer">
-          <a class="button secondary full-width" href="/logout">Logout</a>
+          <a class="button secondary full-width" href="/logout">🚪 Logout</a>
         </div>
       </aside>
 
@@ -1061,8 +1061,8 @@ app.get('/dashboard', requireAuth, (req, res) => {
         <header class="topbar panel">
           <div>
             <p class="eyebrow">Dashboard</p>
-            <h1 id="pageTitle">Scripts</h1>
-            <p class="muted">Manage hosting, access, and obfuscation from one place.</p>
+            <h1 id="pageTitle">📜 Scripts</h1>
+            <p class="muted">Manage hosting, access, keys, panels, and obfuscation.</p>
           </div>
           <div class="topbar-actions">
             <button class="button secondary" id="refreshButton">Refresh</button>
@@ -1072,22 +1072,22 @@ app.get('/dashboard', requireAuth, (req, res) => {
 
         <section class="stats-grid" id="statsGrid">
           <article class="stat-card panel">
-            <span class="stat-label">Scripts</span>
+            <span class="stat-label">📜 Scripts</span>
             <strong class="stat-value" id="statScripts">0</strong>
             <span class="stat-meta" id="statScriptsMeta">0 remaining</span>
           </article>
           <article class="stat-card panel">
-            <span class="stat-label">Panels</span>
+            <span class="stat-label">📋 Panels</span>
             <strong class="stat-value" id="statPanels">0</strong>
             <span class="stat-meta" id="statPanelsMeta">0 remaining</span>
           </article>
           <article class="stat-card panel">
-            <span class="stat-label">License keys</span>
+            <span class="stat-label">🔑 License Keys</span>
             <strong class="stat-value" id="statKeys">0</strong>
             <span class="stat-meta" id="statKeysMeta">Active inventory</span>
           </article>
           <article class="stat-card panel">
-            <span class="stat-label">Banned HWIDs</span>
+            <span class="stat-label">🚫 Banned HWIDs</span>
             <strong class="stat-value" id="statHwids">0</strong>
             <span class="stat-meta" id="statHwidsMeta">Current blocks</span>
           </article>
@@ -1097,8 +1097,8 @@ app.get('/dashboard', requireAuth, (req, res) => {
           <div class="panel section-card">
             <div class="section-header">
               <div>
-                <h2>Create script</h2>
-                <p class="muted">Save a Lua source file and optionally obfuscate it after upload.</p>
+                <h2>📜 Upload Script</h2>
+                <p class="muted">Save your Lua source and optionally obfuscate it after upload.</p>
               </div>
             </div>
             <div class="form-grid two">
@@ -1107,8 +1107,8 @@ app.get('/dashboard', requireAuth, (req, res) => {
                 <input id="scriptName" type="text" placeholder="Example: Main loader" />
               </div>
               <div class="field checkbox-group">
-                <label class="check"><input id="ffaModeCheck" type="checkbox" /> Free access mode</label>
-                <label class="check"><input id="compressModeCheck" type="checkbox" /> Obfuscate after save</label>
+                <label class="check"><input id="ffaModeCheck" type="checkbox" /> 🔓 FFA Mode (No key required)</label>
+                <label class="check"><input id="compressModeCheck" type="checkbox" /> 🔮 Auto-Obfuscate</label>
               </div>
               <div class="field full">
                 <label for="scriptCode">Source code</label>
@@ -1116,13 +1116,13 @@ app.get('/dashboard', requireAuth, (req, res) => {
               </div>
             </div>
             <div class="form-actions">
-              <button class="button primary" id="saveScriptButton">Save script</button>
+              <button class="button primary" id="saveScriptButton">⚡ Host Script</button>
             </div>
           </div>
 
           <div class="section-header inline-header">
             <div>
-              <h2>Your scripts</h2>
+              <h2>Your Scripts</h2>
               <p class="muted">Saved scripts, loaders, and access settings.</p>
             </div>
             <span class="count-badge" id="scriptsCount">0 items</span>
@@ -1134,7 +1134,7 @@ app.get('/dashboard', requireAuth, (req, res) => {
           <div class="panel section-card">
             <div class="section-header">
               <div>
-                <h2>Create panel</h2>
+                <h2>📋 Create Panel</h2>
                 <p class="muted">Choose a script and send a Discord access panel to a channel.</p>
               </div>
             </div>
