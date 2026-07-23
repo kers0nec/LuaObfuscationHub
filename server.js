@@ -187,7 +187,6 @@ CREATE INDEX IF NOT EXISTS idx_license_keys_key ON license_keys(key);
 CREATE INDEX IF NOT EXISTS idx_license_keys_script_id ON license_keys(script_id);
 CREATE INDEX IF NOT EXISTS idx_license_keys_user_id ON license_keys(user_id);
 CREATE INDEX IF NOT EXISTS idx_scripts_user_id ON scripts(user_id);
-CREATE INDEX IF NOT EXISTS idx_scripts_public_id ON scripts(public_id);
 CREATE INDEX IF NOT EXISTS idx_panels_user_id ON panels(user_id);
 CREATE INDEX IF NOT EXISTS idx_whitelist_script_user ON script_whitelist(script_id, discord_user_id);
 CREATE INDEX IF NOT EXISTS idx_access_bans_discord_id ON access_bans(discord_id);
@@ -195,14 +194,24 @@ CREATE INDEX IF NOT EXISTS idx_access_bans_user_id ON access_bans(user_id);
 `);
 
 function columnExists(tableName, columnName) {
-  const columns = db.prepare(`PRAGMA table_info(${tableName})`).all();
+  const columns = db.prepare(`PRAGMA table_info('${tableName}')`).all();
   return columns.some((column) => column.name === columnName);
 }
 
 function addColumnIfMissing(tableName, columnDefinition) {
   const [columnName] = columnDefinition.trim().split(/\s+/);
   if (!columnExists(tableName, columnName)) {
-    db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnDefinition}`);
+    try {
+      db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnDefinition}`);
+    } catch (error) {
+      if (!columnExists(tableName, columnName)) throw error;
+    }
+  }
+}
+
+function createIndexIfPossible(indexSql, tableName, requiredColumn) {
+  if (!requiredColumn || columnExists(tableName, requiredColumn)) {
+    db.exec(indexSql);
   }
 }
 
@@ -210,6 +219,8 @@ addColumnIfMissing('scripts', 'public_id TEXT');
 addColumnIfMissing('license_keys', 'last_hwid_reset_at TEXT');
 addColumnIfMissing('panels', 'buyer_role_id TEXT');
 addColumnIfMissing('panels', 'free_key_hours INTEGER DEFAULT 24');
+
+createIndexIfPossible('CREATE INDEX IF NOT EXISTS idx_scripts_public_id ON scripts(public_id);', 'scripts', 'public_id');
 
 function makeId(prefix) {
   return `${prefix}_${crypto.randomBytes(8).toString('hex')}`;
@@ -236,10 +247,19 @@ function makePublicId() {
 }
 
 function ensureScriptPublicIds() {
-  const rows = db.prepare('SELECT id FROM scripts WHERE public_id IS NULL OR TRIM(public_id) = ""').all();
-  const update = db.prepare('UPDATE scripts SET public_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
-  for (const row of rows) {
-    update.run(makePublicId(), row.id);
+  try {
+    if (!columnExists('scripts', 'public_id')) {
+      console.warn('Skipping public_id backfill because scripts.public_id does not exist yet');
+      return;
+    }
+
+    const rows = db.prepare("SELECT id FROM scripts WHERE public_id IS NULL OR TRIM(COALESCE(public_id, '')) = ''").all();
+    const update = db.prepare('UPDATE scripts SET public_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+    for (const row of rows) {
+      update.run(makePublicId(), row.id);
+    }
+  } catch (error) {
+    console.error('public_id migration warning:', error.message);
   }
 }
 
