@@ -45,14 +45,21 @@ const OWNER_ID = process.env.OWNER_ID || '1207803375807373415';
 const BRAND_COLOR = 0x22c3ff;
 const DEFAULT_MAX_SCRIPTS = Number(process.env.DEFAULT_MAX_SCRIPTS || 100);
 const DEFAULT_MAX_PANELS = Number(process.env.DEFAULT_MAX_PANELS || 50);
-const OBF_API_URL = process.env.OBF_API_URL || 'https://kers0ne-0bf.lovable.app/api/public/obfuscate';
-const OBF_API_KEY = process.env.OBF_API_KEY || 'kers0neontop123';
+const DEFAULT_OBFUSCATOR = process.env.DEFAULT_OBFUSCATOR || 'hq99';
+const HQ99_OBF_API_URL = process.env.HQ99_OBF_API_URL || 'https://obf.hungquan99.site/obfuscate';
+const HQ99_OBF_API_KEY = process.env.HQ99_OBF_API_KEY || 'hq99ontop123';
+const LUAOBF_API_BASE = process.env.LUAOBF_API_BASE || 'https://api.luaobfuscator.com/v1';
+const LUAOBF_API_KEY = process.env.LUAOBF_API_KEY || '1dfc3091-b017-d5cc-f7d8-7f7e4669ae85ae50';
+const SUPPORTED_OBFUSCATORS = {
+  hq99: { id: 'hq99', label: 'HQ99 Obfuscation' },
+  luaobfuscator: { id: 'luaobfuscator', label: 'LuaObfuscator API' },
+};
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 
 console.log('LuaObfuscationHub starting');
 console.log('Domain:', PUBLIC_BASE_URL);
 console.log('Owner ID:', OWNER_ID);
-console.log('Obfuscation API:', OBF_API_URL);
+console.log('Obfuscators:', Object.keys(SUPPORTED_OBFUSCATORS).join(', '));
 
 function ensureUploadsDir() {
   if (!fs.existsSync(UPLOADS_DIR)) {
@@ -103,6 +110,7 @@ CREATE TABLE IF NOT EXISTS scripts (
   code TEXT,
   obfuscated_code TEXT,
   public_id TEXT UNIQUE,
+  obfuscator TEXT DEFAULT 'hq99',
   version TEXT DEFAULT '1.0.0',
   status TEXT DEFAULT 'active',
   ffa_mode INTEGER DEFAULT 0,
@@ -216,6 +224,7 @@ function createIndexIfPossible(indexSql, tableName, requiredColumn) {
 }
 
 addColumnIfMissing('scripts', 'public_id TEXT');
+addColumnIfMissing('scripts', "obfuscator TEXT DEFAULT 'hq99'");
 addColumnIfMissing('license_keys', 'last_hwid_reset_at TEXT');
 addColumnIfMissing('panels', 'buyer_role_id TEXT');
 addColumnIfMissing('panels', 'free_key_hours INTEGER DEFAULT 24');
@@ -242,6 +251,15 @@ function generateLicenseKey() {
   return randomString(16, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789');
 }
 
+function normalizeObfuscator(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return SUPPORTED_OBFUSCATORS[normalized] ? normalized : DEFAULT_OBFUSCATOR;
+}
+
+function getObfuscatorLabel(value) {
+  return SUPPORTED_OBFUSCATORS[normalizeObfuscator(value)]?.label || SUPPORTED_OBFUSCATORS[DEFAULT_OBFUSCATOR].label;
+}
+
 function makePublicId() {
   return crypto.randomBytes(32).toString('hex');
 }
@@ -263,7 +281,22 @@ function ensureScriptPublicIds() {
   }
 }
 
+function ensureScriptObfuscators() {
+  try {
+    if (!columnExists('scripts', 'obfuscator')) {
+      console.warn('Skipping obfuscator backfill because scripts.obfuscator does not exist yet');
+      return;
+    }
+
+    db.prepare("UPDATE scripts SET obfuscator = ? WHERE obfuscator IS NULL OR TRIM(COALESCE(obfuscator, '')) = ''")
+      .run(DEFAULT_OBFUSCATOR);
+  } catch (error) {
+    console.error('obfuscator migration warning:', error.message);
+  }
+}
+
 ensureScriptPublicIds();
+ensureScriptObfuscators();
 
 function getAccessBan(discordId, userId = null) {
   if (userId) {
@@ -1233,7 +1266,7 @@ document.getElementById('apiKeyInput')?.addEventListener('keydown', (event) => {
 const INLINE_DASHBOARD_JS = textBlock(function () {/*
 const APP = window.__APP__ || {};
 const currentUser = APP.user || {};
-const defaults = APP.defaults || { maxScripts: 100, maxPanels: 50 };
+const defaults = APP.defaults || { maxScripts: 100, maxPanels: 50, defaultObfuscator: 'hq99' };
 const baseUrl = APP.baseUrl || window.location.origin;
 
 const viewTitles = {
@@ -1270,6 +1303,8 @@ let currentData = {
 };
 let apiKeysCache = [];
 let serverTime = Date.now();
+let editingScriptId = null;
+let editingPanelId = null;
 
 function qs(id) {
   return document.getElementById(id);
@@ -1330,6 +1365,23 @@ async function requestJSON(url, options = {}) {
 
   if (!response.ok) throw new Error(data.error || 'Request failed');
   return data;
+}
+
+function normalizeObfuscatorClient(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['hq99', 'luaobfuscator'].includes(normalized) ? normalized : (defaults.defaultObfuscator || 'hq99');
+}
+
+function obfuscatorLabel(value) {
+  return normalizeObfuscatorClient(value) === 'luaobfuscator' ? 'LuaObfuscator API' : 'HQ99 Obfuscation';
+}
+
+function obfuscatorOptions(selectedValue) {
+  const selected = normalizeObfuscatorClient(selectedValue);
+  return [
+    { value: 'hq99', label: 'HQ99 Obfuscation' },
+    { value: 'luaobfuscator', label: 'LuaObfuscator API' },
+  ].map((option) => `<option value="${option.value}" ${option.value === selected ? 'selected' : ''}>${option.label}</option>`).join('');
 }
 
 function hostedLoader(script) {
@@ -1404,12 +1456,21 @@ function renderScripts() {
             ${badge(script.status === 'active' ? 'Active' : 'Disabled', script.status === 'active' ? 'success' : 'danger')}
             ${badge(script.ffa_mode ? 'Open Access' : 'Key Required', script.ffa_mode ? 'warning' : 'info')}
             ${badge(script.compress_mode ? 'Compressed' : 'Source', script.compress_mode ? 'info' : 'warning')}
+            ${badge(normalizeObfuscatorClient(script.obfuscator) === 'luaobfuscator' ? 'LuaObfuscator' : 'HQ99', 'info')}
           </div>
         </div>
 
         <div class="meta-list">
           <div class="meta-item"><strong>Script ID</strong><span>${escapeHtml(script.id)}</span></div>
           <div class="meta-item"><strong>Hosted Path</strong><span>${escapeHtml(script.public_id || '')}</span></div>
+          <div class="meta-item"><strong>Obfuscator</strong><span>${escapeHtml(obfuscatorLabel(script.obfuscator))}</span></div>
+        </div>
+
+        <div class="field">
+          <label for="obf-${script.id}">Obfuscator</label>
+          <select id="obf-${script.id}" onchange="setScriptObfuscator('${script.id}', this.value)">
+            ${obfuscatorOptions(script.obfuscator)}
+          </select>
         </div>
 
         <div class="code-block">
@@ -1429,6 +1490,7 @@ function renderScripts() {
         </div>
 
         <div class="action-row">
+          <button class="button secondary small" onclick="editScript('${script.id}')">Edit</button>
           <button class="button secondary small" onclick="toggleScript('${script.id}')">${script.status === 'active' ? 'Disable' : 'Enable'}</button>
           <button class="button secondary small" onclick="toggleFfa('${script.id}')">${script.ffa_mode ? 'Disable Open Access' : 'Enable Open Access'}</button>
           ${script.compress_mode ? '' : `<button class="button primary small" onclick="obfuscateScript('${script.id}')">Compress</button>`}
@@ -1471,6 +1533,7 @@ function renderPanels() {
         </div>
 
         <div class="action-row">
+          <button class="button secondary small" onclick="editPanel('${panel.id}')">Edit</button>
           <button class="button primary small" onclick="sendPanel('${panel.id}')">Send Panel</button>
           <button class="button secondary small" onclick='copyText(${JSON.stringify(panel.id)})'>Copy Panel ID</button>
           <button class="button danger small" onclick="deletePanel('${panel.id}')">Delete</button>
@@ -1478,6 +1541,96 @@ function renderPanels() {
       </article>
     `;
   }).join('');
+}
+
+function resetScriptForm() {
+  editingScriptId = null;
+  qs('scriptName').value = '';
+  qs('scriptCode').value = '';
+  qs('scriptObfuscator').value = defaults.defaultObfuscator || 'hq99';
+  qs('ffaModeCheck').checked = false;
+  qs('compressModeCheck').checked = false;
+  qs('editorFileLabel').textContent = 'untitled.lua';
+  qs('saveScriptButton').textContent = 'Save script';
+  qs('cancelScriptEditButton').classList.add('hidden');
+  syncEditor();
+}
+
+function editScript(id) {
+  const script = getScriptById(id);
+  if (!script) {
+    notify('Script not found', 'Unable to load the selected script for editing.', 'error');
+    return;
+  }
+
+  editingScriptId = id;
+  qs('scriptName').value = script.name || '';
+  qs('scriptCode').value = script.code || '';
+  qs('scriptObfuscator').value = normalizeObfuscatorClient(script.obfuscator);
+  qs('ffaModeCheck').checked = Boolean(script.ffa_mode);
+  qs('compressModeCheck').checked = Boolean(script.compress_mode);
+  qs('editorFileLabel').textContent = `${script.name || 'script'}.lua`;
+  qs('saveScriptButton').textContent = 'Update script';
+  qs('cancelScriptEditButton').classList.remove('hidden');
+  syncEditor();
+  setView('scripts');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function updatePanelPreview() {
+  const name = qs('panelName')?.value.trim() || 'Release panel';
+  const description = qs('panelDescription')?.value.trim() || 'yo';
+  const scriptId = qs('panelScriptId')?.value || '';
+  const buyerRoleId = qs('panelBuyerRoleId')?.value.trim() || 'Not set';
+  const freeKeyHours = Number(qs('panelFreeKeyHours')?.value) || 0;
+  const hwidCooldown = Number(qs('panelHwidCooldown')?.value) || 0;
+  const script = getScriptById(scriptId);
+
+  qs('panelPreviewTitle').textContent = `🔷 ${name}`;
+  qs('panelPreviewDescription').textContent = description || 'yo';
+  qs('panelPreviewScriptBadge').textContent = script ? `📜 ${script.name}` : '📜 No script selected';
+  const accessBadge = qs('panelPreviewAccessBadge');
+  accessBadge.textContent = script?.ffa_mode ? '🔓 Open Access' : '🔑 Key Required';
+  accessBadge.className = `badge ${script?.ffa_mode ? 'warning' : 'success'}`;
+  qs('panelPreviewRole').textContent = buyerRoleId;
+  qs('panelPreviewFreeKey').textContent = freeKeyHours > 0 ? `${freeKeyHours} hours` : 'Disabled';
+  qs('panelPreviewHwid').textContent = `${hwidCooldown || 0} seconds`;
+}
+
+function resetPanelForm() {
+  editingPanelId = null;
+  qs('panelName').value = '';
+  qs('panelDescription').value = '';
+  qs('panelChannelId').value = '';
+  qs('panelScriptId').value = '';
+  qs('panelBuyerRoleId').value = '';
+  qs('panelFreeKeyHours').value = '24';
+  qs('panelHwidCooldown').value = '180';
+  qs('savePanelButton').textContent = 'Create panel';
+  qs('cancelPanelEditButton').classList.add('hidden');
+  updatePanelPreview();
+}
+
+function editPanel(id) {
+  const panel = getPanelById(id);
+  if (!panel) {
+    notify('Panel not found', 'Unable to load the selected panel for editing.', 'error');
+    return;
+  }
+
+  editingPanelId = id;
+  qs('panelName').value = panel.name || '';
+  qs('panelDescription').value = panel.description || '';
+  qs('panelChannelId').value = panel.channel_id || '';
+  qs('panelScriptId').value = panel.script_id || '';
+  qs('panelBuyerRoleId').value = panel.buyer_role_id || '';
+  qs('panelFreeKeyHours').value = String(panel.free_key_hours ?? 24);
+  qs('panelHwidCooldown').value = String(panel.hwid_cooldown ?? 180);
+  qs('savePanelButton').textContent = 'Update panel';
+  qs('cancelPanelEditButton').classList.remove('hidden');
+  updatePanelPreview();
+  setView('panels');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function renderKeys() {
@@ -1657,6 +1810,7 @@ function renderAll() {
   renderKeys();
   renderHwids();
   updateSelects();
+  updatePanelPreview();
   if (currentUser.is_owner) {
     renderApiKeys();
     renderAccessBans();
@@ -1689,31 +1843,29 @@ async function submitScript() {
   const code = qs('scriptCode').value;
   const ffaMode = qs('ffaModeCheck').checked;
   const compressMode = qs('compressModeCheck').checked;
+  const obfuscator = normalizeObfuscatorClient(qs('scriptObfuscator').value);
   if (!name || !code.trim()) {
     notify('Missing fields', 'Enter a script name and source code.', 'error');
     return;
   }
 
   try {
-    const data = await requestJSON('/api/create-script', {
-      method: 'POST',
+    const isEditing = Boolean(editingScriptId);
+    const data = await requestJSON(isEditing ? `/api/scripts/${editingScriptId}` : '/api/create-script', {
+      method: isEditing ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, code, ffaMode, compressMode }),
+      body: JSON.stringify({ name, code, ffaMode, compressMode, obfuscator }),
     });
 
-    qs('scriptName').value = '';
-    qs('scriptCode').value = '';
-    qs('ffaModeCheck').checked = false;
-    qs('compressModeCheck').checked = false;
-    qs('editorFileLabel').textContent = 'untitled.lua';
-    syncEditor();
+    const targetId = data.id || editingScriptId;
+    resetScriptForm();
 
     if (compressMode) {
-      notify('Script saved', 'Script saved successfully. Compression is now running.');
-      await obfuscateScript(data.id, true);
+      notify(isEditing ? 'Script updated' : 'Script saved', isEditing ? 'Script updated successfully. Compression is now running.' : 'Script saved successfully. Compression is now running.');
+      await obfuscateScript(targetId, true);
     } else {
       await loadData({ silent: true });
-      notify('Script saved', 'The script has been saved successfully.');
+      notify(isEditing ? 'Script updated' : 'Script saved', isEditing ? 'The script has been updated successfully.' : 'The script has been saved successfully.');
     }
   } catch (error) {
     notify('Save failed', error.message || 'Unable to save script.', 'error');
@@ -1721,17 +1873,33 @@ async function submitScript() {
 }
 
 async function obfuscateScript(scriptId, silent = false) {
+  const select = qs(`obf-${scriptId}`);
+  const obfuscator = select ? normalizeObfuscatorClient(select.value) : undefined;
   try {
     await requestJSON('/api/obfuscate-script', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scriptId }),
+      body: JSON.stringify({ scriptId, obfuscator }),
     });
     await loadData({ silent: true });
     notify('Compression complete', silent ? 'The saved script was compressed successfully.' : 'Script compressed successfully.');
   } catch (error) {
     notify('Compression failed', error.message || 'Unable to compress the script.', 'error');
     throw error;
+  }
+}
+
+async function setScriptObfuscator(scriptId, obfuscator) {
+  try {
+    await requestJSON(`/api/scripts/${scriptId}/obfuscator`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ obfuscator }),
+    });
+    await loadData({ silent: true });
+    notify('Obfuscator updated', `Saved ${obfuscatorLabel(obfuscator)} for this script.`);
+  } catch (error) {
+    notify('Update failed', error.message || 'Unable to update the obfuscator.', 'error');
   }
 }
 
@@ -1785,19 +1953,16 @@ async function submitPanel() {
   }
 
   try {
-    await requestJSON('/api/create-panel', {
-      method: 'POST',
+    const isEditing = Boolean(editingPanelId);
+    await requestJSON(isEditing ? `/api/panels/${editingPanelId}` : '/api/create-panel', {
+      method: isEditing ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, description, channelId, scriptId, buyerRoleId, freeKeyHours, hwidCooldown }),
     });
 
-    ['panelName', 'panelDescription', 'panelChannelId', 'panelBuyerRoleId'].forEach((id) => { qs(id).value = ''; });
-    qs('panelScriptId').value = '';
-    qs('panelFreeKeyHours').value = '24';
-    qs('panelHwidCooldown').value = '180';
-
+    resetPanelForm();
     await loadData({ silent: true });
-    notify('Panel created', 'Discord panel configuration saved.');
+    notify(isEditing ? 'Panel updated' : 'Panel created', isEditing ? 'Discord panel configuration updated.' : 'Discord panel configuration saved.');
   } catch (error) {
     notify('Create failed', error.message || 'Unable to create the panel.', 'error');
   }
@@ -2104,20 +2269,30 @@ function attachEvents() {
   });
 
   qs('saveScriptButton')?.addEventListener('click', submitScript);
+  qs('cancelScriptEditButton')?.addEventListener('click', resetScriptForm);
   qs('savePanelButton')?.addEventListener('click', submitPanel);
+  qs('cancelPanelEditButton')?.addEventListener('click', resetPanelForm);
   qs('generateKeyButton')?.addEventListener('click', generateKey);
   qs('banHwidButton')?.addEventListener('click', banHwid);
   qs('adminGenerateKeyButton')?.addEventListener('click', adminGenerateKey);
   qs('adminUpdateLimitsButton')?.addEventListener('click', adminUpdateLimits);
   qs('adminBanUserButton')?.addEventListener('click', adminBanUser);
+
+  ['panelName', 'panelDescription', 'panelScriptId', 'panelBuyerRoleId', 'panelFreeKeyHours', 'panelHwidCooldown'].forEach((id) => {
+    qs(id)?.addEventListener('input', updatePanelPreview);
+    qs(id)?.addEventListener('change', updatePanelPreview);
+  });
 }
 
 window.submitScript = submitScript;
+window.editScript = editScript;
 window.obfuscateScript = obfuscateScript;
+window.setScriptObfuscator = setScriptObfuscator;
 window.toggleScript = toggleScript;
 window.toggleFfa = toggleFfa;
 window.deleteScript = deleteScript;
 window.submitPanel = submitPanel;
+window.editPanel = editPanel;
 window.sendPanel = sendPanel;
 window.deletePanel = deletePanel;
 window.generateKey = generateKey;
@@ -2276,6 +2451,11 @@ function buildLoaderSnippet(script) {
     script = getScriptById(script.id);
   }
 
+  if (!script.obfuscator) {
+    db.prepare('UPDATE scripts SET obfuscator = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(DEFAULT_OBFUSCATOR, script.id);
+    script = getScriptById(script.id);
+  }
+
   if (script.ffa_mode) {
     return `loadstring(game:HttpGet("${buildHostedLoaderUrl(script.public_id)}"))()`;
   }
@@ -2357,39 +2537,39 @@ function canDiscordUserAccessScript(scriptId, discordUserId) {
 function buildPanelEmbed(panel, script) {
   return new EmbedBuilder()
     .setColor(BRAND_COLOR)
-    .setTitle(panel.name)
-    .setDescription(panel.description || 'Secure script access panel')
+    .setTitle(`🔷 ${panel.name}`)
+    .setDescription(panel.description || 'yo')
     .addFields(
-      { name: 'Script', value: script.name, inline: true },
-      { name: 'Status', value: script.status === 'active' ? 'Active' : 'Disabled', inline: true },
-      { name: 'Version', value: script.version || '1.0.0', inline: true }
+      { name: '📜 Script', value: script.name, inline: true },
+      { name: '📊 Status', value: script.status === 'active' ? 'Active' : 'Disabled', inline: true },
+      { name: '🧩 Version', value: script.version || '1.0.0', inline: true }
     )
     .setFooter({ text: 'LuaObfuscationHub | v5' });
 }
 
 function buildPanelComponents(panel) {
   const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`panelview_${panel.id}`).setLabel('View Script').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`panelredeem_${panel.id}`).setLabel('Redeem Key').setStyle(ButtonStyle.Success)
+    new ButtonBuilder().setCustomId(`panelview_${panel.id}`).setLabel('📜 View Script').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`panelredeem_${panel.id}`).setLabel('🔑 Redeem Key').setStyle(ButtonStyle.Success)
   );
 
   const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`panelkeyinfo_${panel.id}`).setLabel('Key Info').setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(`panelkeyinfo_${panel.id}`).setLabel('📊 Key Info').setStyle(ButtonStyle.Secondary)
   );
 
   const row3 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`panelbuyerrole_${panel.id}`).setLabel('Get Buyer Role').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`panelfreekey_${panel.id}`).setLabel('Free Key').setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(`panelbuyerrole_${panel.id}`).setLabel('👤 Get Buyer Role').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`panelfreekey_${panel.id}`).setLabel('🔗 Free Key').setStyle(ButtonStyle.Secondary)
   );
 
   const row4 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`panelresethwid_${panel.id}`).setLabel('Reset HWID').setStyle(ButtonStyle.Danger)
+    new ButtonBuilder().setCustomId(`panelresethwid_${panel.id}`).setLabel('⚙️ Reset HWID').setStyle(ButtonStyle.Danger)
   );
 
   return [row1, row2, row3, row4];
 }
 
-async function obfuscateScript(code) {
+async function obfuscateWithHq99(code) {
   ensureUploadsDir();
   const tempFile = path.join(UPLOADS_DIR, `temp_${Date.now()}_${crypto.randomBytes(4).toString('hex')}.lua`);
   fs.writeFileSync(tempFile, code, 'utf8');
@@ -2397,12 +2577,14 @@ async function obfuscateScript(code) {
   try {
     const form = new FormData();
     form.append('file', fs.createReadStream(tempFile));
+    form.append('preset', 'Default');
+    form.append('roblox', 'true');
     form.append('anti_env_logger', 'true');
 
-    const response = await fetch(OBF_API_URL, {
+    const response = await fetch(HQ99_OBF_API_URL, {
       method: 'POST',
       headers: {
-        'X-API-Key': OBF_API_KEY,
+        'X-API-Key': HQ99_OBF_API_KEY,
         ...form.getHeaders(),
       },
       body: form,
@@ -2410,17 +2592,78 @@ async function obfuscateScript(code) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(errorText || 'Obfuscation request failed');
+      throw new Error(errorText || 'HQ99 obfuscation request failed');
     }
 
     return await response.text();
-  } catch (error) {
-    console.error('Obfuscation error:', error);
-    throw error;
   } finally {
     if (fs.existsSync(tempFile)) {
       fs.unlinkSync(tempFile);
     }
+  }
+}
+
+async function obfuscateWithLuaObfuscator(code) {
+  const createResponse = await fetch(`${LUAOBF_API_BASE}/obfuscator/newscript`, {
+    method: 'POST',
+    headers: {
+      apikey: LUAOBF_API_KEY,
+      'content-type': 'text/plain',
+    },
+    body: code,
+  });
+
+  let createData = {};
+  try {
+    createData = await createResponse.json();
+  } catch {
+    createData = {};
+  }
+
+  if (!createResponse.ok || createData.message || !createData.sessionId) {
+    throw new Error(createData.message || 'LuaObfuscator failed to create a script session');
+  }
+
+  const config = {
+    MinifiyAll: true,
+    Virtualize: true,
+  };
+
+  const obfuscateResponse = await fetch(`${LUAOBF_API_BASE}/obfuscator/obfuscate`, {
+    method: 'POST',
+    headers: {
+      apikey: LUAOBF_API_KEY,
+      sessionId: createData.sessionId,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(config),
+  });
+
+  let obfuscateData = {};
+  try {
+    obfuscateData = await obfuscateResponse.json();
+  } catch {
+    obfuscateData = {};
+  }
+
+  if (!obfuscateResponse.ok || obfuscateData.message || !obfuscateData.code) {
+    throw new Error(obfuscateData.message || 'LuaObfuscator failed to obfuscate the uploaded script');
+  }
+
+  return obfuscateData.code;
+}
+
+async function obfuscateScript(code, provider = DEFAULT_OBFUSCATOR) {
+  const obfuscator = normalizeObfuscator(provider);
+
+  try {
+    if (obfuscator === 'luaobfuscator') {
+      return await obfuscateWithLuaObfuscator(code);
+    }
+    return await obfuscateWithHq99(code);
+  } catch (error) {
+    console.error(`Obfuscation error (${obfuscator}):`, error);
+    throw error;
   }
 }
 
@@ -2825,6 +3068,7 @@ app.post('/api/create-script', requireAuth, (req, res) => {
   const code = String(req.body.code || '');
   const compressMode = Boolean(req.body.compressMode);
   const ffaMode = Boolean(req.body.ffaMode);
+  const obfuscator = normalizeObfuscator(req.body.obfuscator);
 
   if (!name || !code.trim()) {
     return res.status(400).json({ error: 'Missing name or code' });
@@ -2833,14 +3077,48 @@ app.post('/api/create-script', requireAuth, (req, res) => {
   const id = makeId('script');
   const publicId = makePublicId();
   db.prepare(
-    `INSERT INTO scripts (id, user_id, name, code, obfuscated_code, public_id, ffa_mode, compress_mode)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(id, user.id, name, code, null, publicId, ffaMode ? 1 : 0, compressMode ? 1 : 0);
+    `INSERT INTO scripts (id, user_id, name, code, obfuscated_code, public_id, obfuscator, ffa_mode, compress_mode)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(id, user.id, name, code, null, publicId, obfuscator, ffaMode ? 1 : 0, compressMode ? 1 : 0);
 
   res.json({
     success: true,
     id,
     remaining: getRemainingLimits(user.id),
+  });
+});
+
+app.put('/api/scripts/:id', requireAuth, (req, res) => {
+  const user = req.session.user;
+  const { id } = req.params;
+  const script = db.prepare('SELECT * FROM scripts WHERE id = ? AND user_id = ?').get(id, user.id);
+  if (!script) return res.status(404).json({ error: 'Script not found' });
+
+  const name = String(req.body.name || '').trim();
+  const code = String(req.body.code || '');
+  const compressMode = Boolean(req.body.compressMode);
+  const ffaMode = Boolean(req.body.ffaMode);
+  const obfuscator = normalizeObfuscator(req.body.obfuscator || script.obfuscator);
+
+  if (!name || !code.trim()) {
+    return res.status(400).json({ error: 'Missing name or code' });
+  }
+
+  const codeChanged = code !== (script.code || '');
+  const obfuscatorChanged = obfuscator !== normalizeObfuscator(script.obfuscator);
+  const nextObfuscatedCode = (codeChanged || obfuscatorChanged) ? null : script.obfuscated_code;
+
+  db.prepare(
+    `UPDATE scripts
+     SET name = ?, code = ?, obfuscated_code = ?, obfuscator = ?, ffa_mode = ?, compress_mode = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`
+  ).run(name, code, nextObfuscatedCode, obfuscator, ffaMode ? 1 : 0, compressMode ? 1 : 0, id);
+
+  res.json({
+    success: true,
+    id,
+    codeChanged,
+    obfuscatorChanged,
   });
 });
 
@@ -2852,15 +3130,27 @@ app.post('/api/obfuscate-script', requireAuth, async (req, res) => {
   const script = db.prepare('SELECT * FROM scripts WHERE id = ? AND user_id = ?').get(scriptId, user.id);
   if (!script) return res.status(404).json({ error: 'Script not found' });
 
+  const obfuscator = normalizeObfuscator(req.body.obfuscator || script.obfuscator);
+
   try {
-    const obfuscatedCode = await obfuscateScript(script.code || '');
+    const obfuscatedCode = await obfuscateScript(script.code || '', obfuscator);
     db.prepare(
-      'UPDATE scripts SET obfuscated_code = ?, compress_mode = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-    ).run(obfuscatedCode, scriptId);
-    res.json({ success: true, obfuscatedCode });
+      'UPDATE scripts SET obfuscated_code = ?, obfuscator = ?, compress_mode = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+    ).run(obfuscatedCode, obfuscator, scriptId);
+    res.json({ success: true, obfuscatedCode, obfuscator });
   } catch (error) {
     res.status(500).json({ error: `Obfuscation failed: ${error.message}` });
   }
+});
+
+app.put('/api/scripts/:id/obfuscator', requireAuth, (req, res) => {
+  const { id } = req.params;
+  const script = db.prepare('SELECT * FROM scripts WHERE id = ? AND user_id = ?').get(id, req.session.user.id);
+  if (!script) return res.status(404).json({ error: 'Script not found' });
+
+  const obfuscator = normalizeObfuscator(req.body.obfuscator);
+  db.prepare('UPDATE scripts SET obfuscator = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(obfuscator, id);
+  res.json({ success: true, obfuscator });
 });
 
 app.post('/api/delete-script', requireAuth, (req, res) => {
@@ -2929,6 +3219,36 @@ app.post('/api/create-panel', requireAuth, (req, res) => {
   ).run(id, user.id, name, description, channelId, scriptId, buyerRoleId, freeKeyHours, hwidCooldown);
 
   res.json({ success: true, id, remaining: getRemainingLimits(user.id) });
+});
+
+app.put('/api/panels/:id', requireAuth, (req, res) => {
+  const user = req.session.user;
+  const { id } = req.params;
+  const panel = db.prepare('SELECT * FROM panels WHERE id = ? AND user_id = ?').get(id, user.id);
+  if (!panel) return res.status(404).json({ error: 'Panel not found' });
+
+  const name = String(req.body.name || '').trim();
+  const description = String(req.body.description || '').trim();
+  const channelId = String(req.body.channelId || '').trim();
+  const scriptId = String(req.body.scriptId || '').trim();
+  const buyerRoleId = String(req.body.buyerRoleId || '').trim();
+  const freeKeyHours = Math.max(0, Number(req.body.freeKeyHours) || 24);
+  const hwidCooldown = Math.max(0, Number(req.body.hwidCooldown) || 180);
+
+  if (!name || !channelId || !scriptId) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  const script = db.prepare('SELECT * FROM scripts WHERE id = ? AND user_id = ?').get(scriptId, user.id);
+  if (!script) return res.status(404).json({ error: 'Script not found' });
+
+  db.prepare(
+    `UPDATE panels
+     SET name = ?, description = ?, channel_id = ?, script_id = ?, buyer_role_id = ?, free_key_hours = ?, hwid_cooldown = ?
+     WHERE id = ? AND user_id = ?`
+  ).run(name, description, channelId, scriptId, buyerRoleId, freeKeyHours, hwidCooldown, id, user.id);
+
+  res.json({ success: true, id });
 });
 
 app.post('/api/delete-panel', requireAuth, (req, res) => {
@@ -3297,7 +3617,14 @@ app.get('/dashboard', requireAuth, (req, res) => {
                 <label for="scriptName">Script name</label>
                 <input id="scriptName" type="text" placeholder="Main loader" />
               </div>
-              <div class="toggle-grid">
+              <div class="field">
+                <label for="scriptObfuscator">Obfuscator</label>
+                <select id="scriptObfuscator">
+                  <option value="hq99" ${DEFAULT_OBFUSCATOR === 'hq99' ? 'selected' : ''}>HQ99 Obfuscation</option>
+                  <option value="luaobfuscator" ${DEFAULT_OBFUSCATOR === 'luaobfuscator' ? 'selected' : ''}>LuaObfuscator API</option>
+                </select>
+              </div>
+              <div class="toggle-grid full">
                 <label class="switch-card"><input id="ffaModeCheck" type="checkbox" /> <span>Open access mode</span></label>
                 <label class="switch-card"><input id="compressModeCheck" type="checkbox" /> <span>Compress on save</span></label>
               </div>
@@ -3328,6 +3655,7 @@ app.get('/dashboard', requireAuth, (req, res) => {
 
             <div class="form-actions">
               <button class="button primary" id="saveScriptButton">Save script</button>
+              <button class="button secondary hidden" id="cancelScriptEditButton" type="button">Cancel edit</button>
             </div>
           </div>
 
@@ -3375,8 +3703,46 @@ app.get('/dashboard', requireAuth, (req, res) => {
               </div>
             </div>
 
+            <div class="section-stack">
+              <div class="resource-card">
+                <div class="resource-header">
+                  <div>
+                    <div class="resource-title" id="panelPreviewTitle">🔷 Release panel</div>
+                    <div class="resource-meta" id="panelPreviewDescription">yo</div>
+                  </div>
+                  <div class="badge-row">
+                    <span class="badge info" id="panelPreviewScriptBadge">📜 No script selected</span>
+                    <span class="badge success" id="panelPreviewAccessBadge">🔑 Key Required</span>
+                  </div>
+                </div>
+                <div class="meta-list">
+                  <div class="meta-item"><strong>Brand</strong><span>LuaObfuscationHub | v5</span></div>
+                  <div class="meta-item"><strong>Buyer role</strong><span id="panelPreviewRole">Not set</span></div>
+                  <div class="meta-item"><strong>Free key</strong><span id="panelPreviewFreeKey">24 hours</span></div>
+                  <div class="meta-item"><strong>HWID cooldown</strong><span id="panelPreviewHwid">180 seconds</span></div>
+                </div>
+                <div class="section-stack">
+                  <div class="action-row">
+                    <span class="button primary small">📜 View Script</span>
+                    <span class="button primary small" style="background: linear-gradient(135deg, #35d17c, #25985a); color: #fff;">🔑 Redeem Key</span>
+                  </div>
+                  <div class="action-row">
+                    <span class="button secondary small">📊 Key Info</span>
+                  </div>
+                  <div class="action-row">
+                    <span class="button secondary small">👤 Get Buyer Role</span>
+                    <span class="button secondary small">🔗 Free Key</span>
+                  </div>
+                  <div class="action-row">
+                    <span class="button danger small">⚙️ Reset HWID</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div class="form-actions">
               <button class="button primary" id="savePanelButton">Create panel</button>
+              <button class="button secondary hidden" id="cancelPanelEditButton" type="button">Cancel edit</button>
             </div>
           </div>
 
@@ -3562,6 +3928,7 @@ app.get('/dashboard', requireAuth, (req, res) => {
         defaults: {
           maxScripts: DEFAULT_MAX_SCRIPTS,
           maxPanels: DEFAULT_MAX_PANELS,
+          defaultObfuscator: DEFAULT_OBFUSCATOR,
         },
         baseUrl: publicBaseUrl(),
       },
