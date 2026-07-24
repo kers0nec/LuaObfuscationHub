@@ -1406,6 +1406,14 @@ function renderScripts() {
 
         <div class="code-block">
           <div class="code-actions">
+            <span>Script ID</span>
+            <button type="button" onclick="copyText('${script.id}')">Copy Script ID</button>
+          </div>
+          <pre>${escapeHtml(script.id)}</pre>
+        </div>
+
+        <div class="code-block">
+          <div class="code-actions">
             <span>Loader snippet</span>
             <button type="button" onclick='copyText(${JSON.stringify(loader)})'>Copy</button>
           </div>
@@ -2383,6 +2391,17 @@ function getScriptByPublicId(publicId) {
 
 function getPanelById(panelId) {
   return db.prepare('SELECT * FROM panels WHERE id = ?').get(panelId);
+}
+
+function getPrimaryPanelForScript(scriptId, ownerUserId = null) {
+  if (ownerUserId) {
+    return db.prepare(
+      'SELECT * FROM panels WHERE script_id = ? AND user_id = ? ORDER BY created_at ASC LIMIT 1'
+    ).get(scriptId, ownerUserId);
+  }
+  return db.prepare(
+    'SELECT * FROM panels WHERE script_id = ? ORDER BY created_at ASC LIMIT 1'
+  ).get(scriptId);
 }
 
 function buildHostedLoaderUrl(publicId) {
@@ -4285,9 +4304,30 @@ client.on('interactionCreate', async (interaction) => {
           discordTag: targetUser.tag,
         });
 
+        const linkedPanel = getPrimaryPanelForScript(scriptId, user.id);
+        let linkedChannelMention = '';
+
+        if (linkedPanel?.channel_id && client.isReady()) {
+          linkedChannelMention = `<#${linkedPanel.channel_id}>`;
+          try {
+            const linkedChannel = await client.channels.fetch(linkedPanel.channel_id);
+            if (linkedChannel?.isTextBased()) {
+              await linkedChannel.send({
+                content: `<@${targetUser.id}> You have been whitelisted! Use the panel below to access your script.`,
+                embeds: [buildPanelEmbed(linkedPanel, script)],
+                components: buildPanelComponents(linkedPanel),
+              });
+            }
+          } catch (error) {
+            console.error('Whitelist panel auto-send error:', error);
+          }
+        }
+
         return interaction.reply({
-          content: `Whitelisted ${targetUser.tag} to ${script.name}.\nAssigned key: ${row.key}`,
-          ephemeral: true,
+          content: linkedChannelMention
+            ? `<@${targetUser.id}> You have been whitelisted!\nYou can access the script via this message --> ${linkedChannelMention}\nAssigned key: \`${row.key}\``
+            : `<@${targetUser.id}> You have been whitelisted!\nAssigned key: \`${row.key}\``,
+          allowedMentions: { users: [targetUser.id] },
         });
       }
 
