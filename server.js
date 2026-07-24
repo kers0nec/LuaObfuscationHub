@@ -38,7 +38,12 @@ const DISCORD_TOKEN = process.env.DISCORD_TOKEN || '';
 const CLIENT_ID = process.env.CLIENT_ID || '';
 const CLIENT_SECRET = process.env.CLIENT_SECRET || '';
 const GUILD_ID = process.env.GUILD_ID || '';
-const DATABASE_PATH = process.env.DATABASE_PATH || path.join(__dirname, 'data.sqlite');
+function defaultDatabasePath() {
+  if (process.env.DATABASE_PATH) return process.env.DATABASE_PATH;
+  if (fs.existsSync('/var/data')) return '/var/data/luaobfuscationhub.sqlite';
+  return path.join(__dirname, 'data.sqlite');
+}
+const DATABASE_PATH = defaultDatabasePath();
 const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
 const PUBLIC_BASE_URL = detectPublicUrl();
 const OWNER_ID = process.env.OWNER_ID || '1207803375807373415';
@@ -52,6 +57,7 @@ const UPLOADS_DIR = path.join(__dirname, 'uploads');
 console.log('LuaObfuscationHub starting');
 console.log('Domain:', PUBLIC_BASE_URL);
 console.log('Owner ID:', OWNER_ID);
+console.log('Database path:', DATABASE_PATH);
 console.log('Obfuscation API:', HQ99_OBF_API_URL);
 
 function ensureUploadsDir() {
