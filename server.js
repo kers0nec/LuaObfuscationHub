@@ -62,7 +62,8 @@ const DATABASE_PATH = resolveDatabasePath();
 const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
 const PUBLIC_BASE_URL = detectPublicUrl();
 const OWNER_ID = process.env.OWNER_ID || '1207803375807373415';
-const BRAND_COLOR = 0x22c3ff;
+const BRAND_COLOR = 0x00fff2;
+const BRAND_COLOR_ALT = 0xff2bd6;
 const DEFAULT_MAX_SCRIPTS = Number(process.env.DEFAULT_MAX_SCRIPTS || 50);
 const DEFAULT_MAX_PANELS = Number(process.env.DEFAULT_MAX_PANELS || 100);
 const HQ99_OBF_API_URL = process.env.HQ99_OBF_API_URL || 'https://obf.hungquan99.site/obfuscate';
@@ -347,22 +348,22 @@ function textBlock(fn) {
 
 const INLINE_APP_CSS = textBlock(function () {/*
 :root {
-  --bg: #050912;
-  --bg-alt: #0a1220;
-  --panel: rgba(11, 18, 31, 0.8);
-  --panel-strong: rgba(13, 21, 36, 0.96);
-  --panel-soft: rgba(17, 27, 45, 0.72);
-  --border: rgba(129, 195, 255, 0.14);
-  --border-strong: rgba(129, 195, 255, 0.3);
-  --text: #edf5ff;
-  --muted: #91a7ca;
-  --accent: #80d8ff;
-  --accent-strong: #4d8dff;
-  --accent-soft: rgba(77, 141, 255, 0.14);
-  --success: #4ade80;
-  --warning: #fbbf24;
-  --danger: #fb7185;
-  --shadow: 0 18px 60px rgba(2, 8, 18, 0.42);
+  --bg: #040308;
+  --bg-alt: #0a0512;
+  --panel: rgba(10, 8, 16, 0.8);
+  --panel-strong: rgba(12, 9, 20, 0.96);
+  --panel-soft: rgba(15, 11, 24, 0.72);
+  --border: rgba(0, 255, 242, 0.18);
+  --border-strong: rgba(255, 43, 214, 0.35);
+  --text: #eafcff;
+  --muted: #9b93b0;
+  --accent: #00fff2;
+  --accent-strong: #ff2bd6;
+  --accent-soft: rgba(255, 43, 214, 0.14);
+  --success: #39ff88;
+  --warning: #ffd60a;
+  --danger: #ff2954;
+  --shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
   --radius-xl: 26px;
   --radius-lg: 20px;
   --radius-md: 16px;
@@ -384,10 +385,10 @@ body {
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: var(--text);
   background:
-    radial-gradient(circle at top left, rgba(77, 141, 255, 0.24), transparent 24%),
-    radial-gradient(circle at top right, rgba(128, 216, 255, 0.16), transparent 20%),
-    radial-gradient(circle at bottom center, rgba(44, 89, 199, 0.12), transparent 22%),
-    linear-gradient(180deg, #050912 0%, #09111d 48%, #050912 100%);
+    radial-gradient(circle at top left, rgba(255, 43, 214, 0.22), transparent 24%),
+    radial-gradient(circle at top right, rgba(0, 255, 242, 0.16), transparent 20%),
+    radial-gradient(circle at bottom center, rgba(168, 32, 200, 0.14), transparent 22%),
+    linear-gradient(180deg, #040308 0%, #050208 48%, #040308 100%);
   line-height: 1.45;
 }
 
@@ -422,7 +423,7 @@ a {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(132, 186, 255, 0.22);
+  background: rgba(0, 255, 242, 0.28);
   border-radius: 999px;
 }
 
@@ -441,7 +442,7 @@ a {
 .panel {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(180deg, rgba(13, 21, 36, 0.94), rgba(10, 17, 29, 0.9));
+  background: linear-gradient(180deg, rgba(12, 9, 20, 0.94), rgba(9, 7, 14, 0.9));
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
@@ -453,7 +454,7 @@ a {
   position: absolute;
   inset: 0 0 auto 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(128, 216, 255, 0.55), transparent);
+  background: linear-gradient(90deg, transparent, rgba(0, 255, 242, 0.55), transparent);
   pointer-events: none;
 }
 
@@ -513,9 +514,9 @@ h1,h2,h3,p { margin: 0; }
   font-size: 28px;
   font-weight: 800;
   color: var(--accent);
-  background: linear-gradient(135deg, rgba(128, 216, 255, 0.22), rgba(77, 141, 255, 0.08));
-  border: 1px solid rgba(128, 216, 255, 0.2);
-  box-shadow: 0 18px 46px rgba(77, 141, 255, 0.18);
+  background: linear-gradient(135deg, rgba(0, 255, 242, 0.22), rgba(255, 43, 214, 0.10));
+  border: 1px solid rgba(0, 255, 242, 0.2);
+  box-shadow: 0 18px 46px rgba(255, 43, 214, 0.18);
 }
 
 .brand-mark.small {
@@ -534,7 +535,7 @@ h1,h2,h3,p { margin: 0; }
 .hero-subtitle {
   margin-top: 10px;
   max-width: 60ch;
-  color: #cfdef5;
+  color: #d8f9ff;
   font-size: 0.98rem;
 }
 
@@ -584,8 +585,8 @@ textarea,
 select {
   width: 100%;
   color: var(--text);
-  background: rgba(6, 12, 22, 0.82);
-  border: 1px solid rgba(143, 182, 235, 0.12);
+  background: rgba(5, 4, 9, 0.82);
+  border: 1px solid rgba(0, 255, 242, 0.14);
   border-radius: 12px;
   padding: 12px 13px;
   outline: none;
@@ -594,14 +595,14 @@ select {
 
 input::placeholder,
 textarea::placeholder {
-  color: #7287aa;
+  color: #8f89a3;
 }
 
 input:focus,
 textarea:focus,
 select:focus {
   border-color: var(--border-strong);
-  box-shadow: 0 0 0 3px rgba(103, 209, 255, 0.08);
+  box-shadow: 0 0 0 3px rgba(0, 255, 242, 0.1);
 }
 
 textarea { resize: vertical; }
@@ -624,23 +625,23 @@ textarea { resize: vertical; }
 .button:disabled { opacity: 0.6; cursor: wait; transform: none; }
 
 .button.primary {
-  color: #07111b;
+  color: #040207;
   font-weight: 700;
-  background: linear-gradient(135deg, #86e2ff 0%, #5dbdff 45%, #5b84ff 100%);
-  box-shadow: 0 14px 34px rgba(77, 141, 255, 0.25);
+  background: linear-gradient(135deg, #5cf9ff 0%, #33e6ff 45%, #e619c4 100%);
+  box-shadow: 0 14px 34px rgba(255, 43, 214, 0.25);
 }
 
 .button.secondary,
 .button.ghost {
   color: var(--text);
-  border-color: rgba(143, 182, 235, 0.14);
+  border-color: rgba(0, 255, 242, 0.16);
   background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.025));
 }
 
 .button.danger {
-  color: #ffd7de;
-  border-color: rgba(251, 113, 133, 0.24);
-  background: rgba(251, 113, 133, 0.08);
+  color: #ffcfe0;
+  border-color: rgba(255, 41, 84, 0.24);
+  background: rgba(255, 41, 84, 0.1);
 }
 
 .button.small {
@@ -664,14 +665,14 @@ textarea { resize: vertical; }
 .divider::after {
   content: "";
   height: 1px;
-  background: rgba(143, 182, 235, 0.12);
+  background: rgba(0, 255, 242, 0.14);
 }
 
 .feature-list { display: grid; gap: 10px; }
 .feature-item {
   padding: 12px 13px;
   border-radius: 12px;
-  border: 1px solid rgba(143, 182, 235, 0.08);
+  border: 1px solid rgba(0, 255, 242, 0.10);
   background: rgba(255, 255, 255, 0.02);
 }
 .feature-title { font-size: 0.92rem; font-weight: 700; margin-bottom: 4px; }
@@ -706,7 +707,7 @@ textarea { resize: vertical; }
   padding: 14px;
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(143, 182, 235, 0.08);
+  border: 1px solid rgba(0, 255, 242, 0.10);
 }
 
 .avatar {
@@ -714,7 +715,7 @@ textarea { resize: vertical; }
   height: 46px;
   border-radius: 14px;
   object-fit: cover;
-  border: 1px solid rgba(143, 182, 235, 0.14);
+  border: 1px solid rgba(0, 255, 242, 0.16);
 }
 
 .nav-list { gap: 8px; margin-bottom: auto; }
@@ -724,7 +725,7 @@ textarea { resize: vertical; }
   border: 1px solid transparent;
   border-radius: 12px;
   background: transparent;
-  color: #c6d4ea;
+  color: #d3cbe6;
   padding: 11px 12px;
   text-align: left;
   cursor: pointer;
@@ -733,13 +734,13 @@ textarea { resize: vertical; }
 
 .nav-link:hover {
   background: rgba(255,255,255,0.03);
-  border-color: rgba(143, 182, 235, 0.1);
+  border-color: rgba(0, 255, 242, 0.12);
 }
 
 .nav-link.active {
   color: var(--text);
-  background: linear-gradient(135deg, rgba(103, 209, 255, 0.16), rgba(58, 163, 255, 0.08));
-  border-color: rgba(103, 209, 255, 0.22);
+  background: linear-gradient(135deg, rgba(0, 255, 242, 0.16), rgba(0, 255, 242, 0.1));
+  border-color: rgba(0, 255, 242, 0.22);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
 }
 
@@ -779,7 +780,7 @@ textarea { resize: vertical; }
 .filter-pill,
 .editor-chip {
   padding: 8px 11px;
-  border: 1px solid rgba(143, 182, 235, 0.12);
+  border: 1px solid rgba(0, 255, 242, 0.14);
   background: rgba(255,255,255,0.03);
 }
 
@@ -788,7 +789,7 @@ textarea { resize: vertical; }
   height: 9px;
   border-radius: 999px;
   background: var(--success);
-  box-shadow: 0 0 16px rgba(74, 222, 128, 0.45);
+  box-shadow: 0 0 16px rgba(57, 255, 136, 0.45);
 }
 
 .stats-grid {
@@ -845,7 +846,7 @@ textarea { resize: vertical; }
   min-height: 48px;
   padding: 0 14px;
   border-radius: 14px;
-  border: 1px solid rgba(143, 182, 235, 0.1);
+  border: 1px solid rgba(0, 255, 242, 0.12);
   background: rgba(255,255,255,0.03);
 }
 .switch-card input[type="checkbox"] {
@@ -864,8 +865,8 @@ textarea { resize: vertical; }
 .resource-card {
   padding: 16px;
   border-radius: 18px;
-  border: 1px solid rgba(143, 182, 235, 0.12);
-  background: linear-gradient(180deg, rgba(15, 24, 40, 0.96), rgba(10, 17, 29, 0.92));
+  border: 1px solid rgba(0, 255, 242, 0.14);
+  background: linear-gradient(180deg, rgba(13, 10, 22, 0.96), rgba(9, 7, 14, 0.92));
   box-shadow: var(--shadow);
   display: grid;
   gap: 14px;
@@ -879,14 +880,14 @@ textarea { resize: vertical; }
   content: "";
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at top right, rgba(128, 216, 255, 0.08), transparent 30%);
+  background: radial-gradient(circle at top right, rgba(0, 255, 242, 0.1), transparent 30%);
   pointer-events: none;
 }
 
 .resource-card:hover {
   transform: translateY(-2px);
-  border-color: rgba(103, 209, 255, 0.24);
-  box-shadow: 0 24px 64px rgba(2, 8, 18, 0.48);
+  border-color: rgba(0, 255, 242, 0.24);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
 }
 
 .resource-header {
@@ -907,14 +908,14 @@ textarea { resize: vertical; }
   font-size: 0.75rem;
   font-weight: 700;
 }
-.badge.info { background: rgba(103, 209, 255, 0.14); color: #d4f2ff; }
-.badge.success { background: rgba(74, 222, 128, 0.14); color: #d7ffe5; }
-.badge.warning { background: rgba(251, 191, 36, 0.14); color: #fff1c5; }
-.badge.danger { background: rgba(251, 113, 133, 0.14); color: #ffdbe2; }
+.badge.info { background: rgba(0, 255, 242, 0.14); color: #c9fbff; }
+.badge.success { background: rgba(57, 255, 136, 0.14); color: #d3ffe9; }
+.badge.warning { background: rgba(255, 214, 10, 0.14); color: #fff2b8; }
+.badge.danger { background: rgba(255, 41, 84, 0.14); color: #ffd6ea; }
 
 .code-block {
-  background: linear-gradient(180deg, rgba(6, 12, 21, 0.98), rgba(8, 14, 26, 0.94));
-  border: 1px solid rgba(143, 182, 235, 0.1);
+  background: linear-gradient(180deg, rgba(5, 4, 9, 0.98), rgba(7, 5, 12, 0.94));
+  border: 1px solid rgba(0, 255, 242, 0.12);
   border-radius: 14px;
   overflow: hidden;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
@@ -926,7 +927,7 @@ textarea { resize: vertical; }
   justify-content: space-between;
   gap: 10px;
   align-items: center;
-  border-bottom: 1px solid rgba(143, 182, 235, 0.08);
+  border-bottom: 1px solid rgba(0, 255, 242, 0.10);
   font-size: 0.84rem;
 }
 .code-actions button {
@@ -940,7 +941,7 @@ textarea { resize: vertical; }
   padding: 12px 14px;
   font-size: 0.8rem;
   font-family: "SFMono-Regular", Consolas, Menlo, monospace;
-  color: #bae7ff;
+  color: #9df9ff;
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 200px;
@@ -972,15 +973,15 @@ textarea { resize: vertical; }
   min-height: 360px;
   border-radius: 16px;
   overflow: hidden;
-  border: 1px solid rgba(143, 182, 235, 0.12);
-  background: linear-gradient(180deg, rgba(6, 12, 22, 0.98), rgba(7, 14, 26, 0.94));
+  border: 1px solid rgba(0, 255, 242, 0.14);
+  background: linear-gradient(180deg, rgba(5, 4, 9, 0.98), rgba(6, 4, 11, 0.94));
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
 }
 .editor-lines {
   margin: 0;
   padding: 16px 8px 16px 12px;
   background: rgba(255,255,255,0.03);
-  color: #61779a;
+  color: #79728f;
   text-align: right;
   line-height: 1.55;
   user-select: none;
@@ -997,7 +998,7 @@ textarea { resize: vertical; }
   resize: none;
   background: transparent;
   box-shadow: none !important;
-  color: #edf6ff;
+  color: #eafcff;
   line-height: 1.55;
   tab-size: 2;
   font-family: "SFMono-Regular", Consolas, Menlo, monospace;
@@ -1006,8 +1007,8 @@ textarea { resize: vertical; }
   overflow: auto;
 }
 .editor-drop.active {
-  border-color: rgba(103, 209, 255, 0.34);
-  box-shadow: inset 0 0 0 1px rgba(103, 209, 255, 0.24);
+  border-color: rgba(0, 255, 242, 0.34);
+  box-shadow: inset 0 0 0 1px rgba(0, 255, 242, 0.24);
 }
 .editor-actions { justify-content: space-between; align-items: center; }
 .editor-meta { gap: 6px; }
@@ -1017,7 +1018,7 @@ textarea { resize: vertical; }
   padding: 24px;
   border-radius: 16px;
   text-align: center;
-  border: 1px dashed rgba(143, 182, 235, 0.14);
+  border: 1px dashed rgba(0, 255, 242, 0.16);
   background: rgba(255,255,255,0.02);
 }
 
@@ -1037,13 +1038,13 @@ textarea { resize: vertical; }
   max-width: 340px;
   padding: 12px 14px;
   border-radius: 14px;
-  border: 1px solid rgba(143, 182, 235, 0.14);
-  background: rgba(11, 18, 31, 0.96);
+  border: 1px solid rgba(0, 255, 242, 0.16);
+  background: rgba(10, 8, 16, 0.96);
   box-shadow: var(--shadow);
   animation: fadeUp 0.2s ease;
 }
-.toast.success { border-color: rgba(74, 222, 128, 0.24); }
-.toast.error { border-color: rgba(251, 113, 133, 0.24); }
+.toast.success { border-color: rgba(57, 255, 136, 0.24); }
+.toast.error { border-color: rgba(255, 41, 84, 0.24); }
 .toast-title { font-weight: 700; margin-bottom: 4px; }
 .toast-message { color: var(--muted); font-size: 0.9rem; }
 
@@ -1055,7 +1056,7 @@ textarea { resize: vertical; }
   align-items: center;
   justify-content: center;
   padding: 18px;
-  background: rgba(4, 8, 16, 0.62);
+  background: rgba(3, 2, 6, 0.62);
   backdrop-filter: blur(8px);
 }
 .modal.open { display: flex; }
@@ -1063,8 +1064,8 @@ textarea { resize: vertical; }
   width: min(100%, 500px);
   padding: 20px;
   border-radius: 18px;
-  background: rgba(10, 18, 31, 0.98);
-  border: 1px solid rgba(143, 182, 235, 0.14);
+  background: rgba(9, 7, 14, 0.98);
+  border: 1px solid rgba(0, 255, 242, 0.16);
   box-shadow: var(--shadow);
 }
 .hidden { display: none !important; }
@@ -1172,6 +1173,162 @@ textarea { resize: vertical; }
 }
 
 
+
+
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Share+Tech+Mono&display=swap');
+
+.brand-name,
+.hero-title,
+.brand-mark,
+h1, h2, h3,
+.eyebrow,
+.stat-value,
+.resource-title,
+button.button {
+  font-family: 'Orbitron', Inter, system-ui, sans-serif;
+  letter-spacing: 0.01em;
+}
+
+.id-chip,
+.code-block pre,
+.code-block code,
+pre, code,
+input[type="text"],
+input[type="search"] {
+  font-family: 'Share Tech Mono', 'SFMono-Regular', Consolas, Menlo, monospace;
+}
+
+body {
+  position: relative;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    repeating-linear-gradient(0deg, rgba(0, 255, 242, 0.025) 0px, rgba(0, 255, 242, 0.025) 1px, transparent 1px, transparent 3px),
+    linear-gradient(rgba(255, 43, 214, 0.02), transparent 60%);
+  mix-blend-mode: screen;
+  opacity: 0.5;
+}
+
+.site-bg,
+.dashboard-shell,
+.auth-grid,
+main,
+header,
+.toast-root {
+  position: relative;
+  z-index: 1;
+}
+
+::selection {
+  background: rgba(0, 255, 242, 0.35);
+  color: #040308;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.brand-mark {
+  text-shadow: 0 0 12px rgba(0, 255, 242, 0.65);
+}
+
+.hero-title {
+  text-shadow: 0 0 26px rgba(0, 255, 242, 0.22), 0 0 46px rgba(255, 43, 214, 0.14);
+}
+
+.resource-card {
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.25s ease;
+}
+
+.resource-card:hover {
+  border-color: rgba(0, 255, 242, 0.45);
+  box-shadow: 0 0 0 1px rgba(0, 255, 242, 0.12), 0 18px 46px rgba(0, 0, 0, 0.55), 0 0 30px rgba(255, 43, 214, 0.08);
+  transform: translateY(-2px);
+}
+
+.button.primary {
+  box-shadow: 0 0 0 1px rgba(0, 255, 242, 0.35), 0 14px 34px rgba(255, 43, 214, 0.28), 0 0 22px rgba(0, 255, 242, 0.22);
+}
+
+.button.primary:hover {
+  box-shadow: 0 0 0 1px rgba(0, 255, 242, 0.55), 0 16px 40px rgba(255, 43, 214, 0.35), 0 0 32px rgba(0, 255, 242, 0.35);
+  transform: translateY(-1px);
+}
+
+.id-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.id-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px 7px 12px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(0, 255, 242, 0.10), rgba(255, 43, 214, 0.08));
+  border: 1px solid rgba(0, 255, 242, 0.35);
+  font-size: 0.78rem;
+  color: var(--text);
+  max-width: 100%;
+}
+
+.id-chip .id-chip-label {
+  color: var(--accent);
+  font-family: 'Orbitron', Inter, sans-serif;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.id-chip .id-chip-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+  color: #d8f9ff;
+}
+
+.id-chip .id-chip-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 255, 242, 0.35);
+  background: rgba(0, 255, 242, 0.08);
+  color: var(--accent);
+  cursor: pointer;
+  flex: none;
+  transition: background 0.15s ease, transform 0.15s ease, color 0.15s ease;
+}
+
+.id-chip .id-chip-copy:hover {
+  background: var(--accent);
+  color: #040308;
+  transform: scale(1.06);
+}
+
+.id-chip .id-chip-copy svg {
+  width: 13px;
+  height: 13px;
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  .id-chip .id-chip-value { max-width: 130px; }
+}
 */});
 
 const INLINE_LOGIN_JS = textBlock(function () {/*
@@ -1389,6 +1546,13 @@ function renderScripts() {
           <div>
             <div class="resource-title">${escapeHtml(script.name)}</div>
             <div class="resource-meta">Created ${escapeHtml(formatDate(script.created_at))}</div>
+            <div class="id-chip-row">
+              <span class="id-chip">
+                <span class="id-chip-label">Script ID</span>
+                <span class="id-chip-value">${escapeHtml(script.id)}</span>
+                <button type="button" class="id-chip-copy" title="Copy Script ID" aria-label="Copy Script ID" onclick="copyText('${script.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg></button>
+              </span>
+            </div>
           </div>
           <div class="badge-row">
             ${badge(script.status === 'active' ? 'Active' : 'Disabled', script.status === 'active' ? 'success' : 'danger')}
@@ -1398,18 +1562,9 @@ function renderScripts() {
         </div>
 
         <div class="meta-list">
-          <div class="meta-item"><strong>Script ID</strong><span>${escapeHtml(script.id)}</span></div>
           <div class="meta-item"><strong>Hosted Path</strong><span>${escapeHtml(script.public_id || '')}</span></div>
           <div class="meta-item"><strong>Delivery</strong><span>${script.ffa_mode ? 'Direct access' : 'Key protected'}</span></div>
           <div class="meta-item"><strong>Build</strong><span>${script.obfuscated_code ? 'HQ99 obfuscated' : 'Raw source'}</span></div>
-        </div>
-
-        <div class="code-block">
-          <div class="code-actions">
-            <span>Script ID</span>
-            <button type="button" onclick="copyText('${script.id}')">Copy Script ID</button>
-          </div>
-          <pre>${escapeHtml(script.id)}</pre>
         </div>
 
         <div class="code-block">
@@ -1457,15 +1612,28 @@ function renderPanels() {
           <div>
             <div class="resource-title">${escapeHtml(panel.name)}</div>
             <div class="resource-meta">${escapeHtml(panel.description || 'No description')}</div>
+            <div class="id-chip-row">
+              <span class="id-chip">
+                <span class="id-chip-label">Script ID</span>
+                <span class="id-chip-value">${escapeHtml(panel.script_id)}</span>
+                <button type="button" class="id-chip-copy" title="Copy Script ID" aria-label="Copy Script ID" onclick="copyText('${panel.script_id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg></button>
+              </span>
+              <span class="id-chip">
+                <span class="id-chip-label">Panel ID</span>
+                <span class="id-chip-value">${escapeHtml(panel.id)}</span>
+                <button type="button" class="id-chip-copy" title="Copy Panel ID" aria-label="Copy Panel ID" onclick="copyText('${panel.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg></button>
+              </span>
+            </div>
           </div>
           <div class="badge-row">
             ${badge('Discord Panel', 'info')}
+            ${badge(panel.channel_id ? 'Linked to Discord' : 'Not linked', panel.channel_id ? 'success' : 'warning')}
             ${badge((panel.free_key_hours || 0) > 0 ? `Free Key ${panel.free_key_hours}h` : 'Free Key Off', (panel.free_key_hours || 0) > 0 ? 'success' : 'warning')}
           </div>
         </div>
 
         <div class="meta-list">
-          <div class="meta-item"><strong>Script</strong><span>${escapeHtml(script?.name || panel.script_id)}</span></div>
+          <div class="meta-item"><strong>Script Name</strong><span>${escapeHtml(script?.name || 'Unknown')}</span></div>
           <div class="meta-item"><strong>Channel ID</strong><span>${escapeHtml(panel.channel_id)}</span></div>
           <div class="meta-item"><strong>Buyer Role</strong><span>${escapeHtml(panel.buyer_role_id || 'Not set')}</span></div>
           <div class="meta-item"><strong>HWID Cooldown</strong><span>${escapeHtml(String(panel.hwid_cooldown || 0))} seconds</span></div>
@@ -1474,7 +1642,6 @@ function renderPanels() {
         <div class="action-row">
           <button class="button secondary small" onclick="editPanel('${panel.id}')">Edit</button>
           <button class="button primary small" onclick="sendPanel('${panel.id}')">Send Panel</button>
-          <button class="button secondary small" onclick='copyText(${JSON.stringify(panel.id)})'>Copy Panel ID</button>
           <button class="button danger small" onclick="deletePanel('${panel.id}')">Delete</button>
         </div>
       </article>
@@ -2448,7 +2615,7 @@ function getLatestActiveClaimedKey(scriptId, discordUserId) {
   return rows.find((row) => !isExpired(row.expires_at)) || null;
 }
 
-function ensureWhitelistAccess({ ownerUserId, scriptId, discordUserId, discordTag }) {
+function ensureWhitelistAccess({ ownerUserId, scriptId, discordUserId, discordTag, durationHours = 0 }) {
   let whitelist = db.prepare(
     'SELECT * FROM script_whitelist WHERE script_id = ? AND discord_user_id = ?'
   ).get(scriptId, discordUserId);
@@ -2463,11 +2630,15 @@ function ensureWhitelistAccess({ ownerUserId, scriptId, discordUserId, discordTa
     }
   }
 
+  const expiresAt = Number(durationHours) > 0
+    ? new Date(Date.now() + Number(durationHours) * 3600000).toISOString()
+    : null;
+
   const newKey = createLicenseKeyRecord({
     scriptId,
     userId: ownerUserId,
     note: `Whitelist for ${discordTag}`,
-    expiresAt: null,
+    expiresAt,
     claimedBy: discordUserId,
     claimedTag: discordTag,
   });
@@ -2484,6 +2655,19 @@ function ensureWhitelistAccess({ ownerUserId, scriptId, discordUserId, discordTa
   }
 
   return newKey;
+}
+
+function removeWhitelistAccess({ scriptId, discordUserId }) {
+  const whitelist = db.prepare(
+    'SELECT * FROM script_whitelist WHERE script_id = ? AND discord_user_id = ?'
+  ).get(scriptId, discordUserId);
+
+  if (whitelist?.granted_key) {
+    db.prepare('DELETE FROM license_keys WHERE key = ?').run(whitelist.granted_key);
+  }
+  db.prepare('DELETE FROM script_whitelist WHERE script_id = ? AND discord_user_id = ?').run(scriptId, discordUserId);
+
+  return Boolean(whitelist);
 }
 
 function canDiscordUserAccessScript(scriptId, discordUserId) {
@@ -2530,6 +2714,31 @@ function buildPanelComponents(panel) {
   );
 
   return [row1, row2, row3];
+}
+
+async function deliverPanelToDiscord(panel, script) {
+  if (!client.isReady()) {
+    return { success: false, statusCode: 503, error: 'Discord bot is not connected' };
+  }
+
+  try {
+    let channel;
+    try {
+      channel = await client.channels.fetch(panel.channel_id);
+    } catch {
+      channel = null;
+    }
+
+    if (!channel) return { success: false, statusCode: 404, error: 'Discord channel not found or inaccessible' };
+    if (!channel.isTextBased()) return { success: false, statusCode: 400, error: 'Selected channel is not a text channel' };
+
+    const embed = buildPanelEmbed(panel, script);
+    await channel.send({ embeds: [embed], components: buildPanelComponents(panel) });
+    return { success: true };
+  } catch (error) {
+    console.error('Panel delivery error:', error);
+    return { success: false, statusCode: 500, error: 'Failed to send panel' };
+  }
 }
 
 function buildMobileViewButton(customId) {
@@ -3074,7 +3283,7 @@ app.put('/api/scripts/:id/ffa', requireAuth, (req, res) => {
   res.json({ success: true, ffa_mode: nextFfa });
 });
 
-app.post('/api/create-panel', requireAuth, (req, res) => {
+app.post('/api/create-panel', requireAuth, async (req, res) => {
   const user = req.session.user;
 
   if (!canCreatePanel(user.id)) {
@@ -3107,10 +3316,21 @@ app.post('/api/create-panel', requireAuth, (req, res) => {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(id, user.id, name, description, channelId, scriptId, buyerRoleId, freeKeyHours, hwidCooldown);
 
-  res.json({ success: true, id, remaining: getRemainingLimits(user.id) });
+  const createdPanel = db.prepare('SELECT * FROM panels WHERE id = ?').get(id);
+
+  // A panel linked to a Discord channel automatically pops up there right away.
+  let discordDelivery = { attempted: false, success: false };
+  if (channelId) {
+    discordDelivery.attempted = true;
+    const delivery = await deliverPanelToDiscord(createdPanel, script);
+    discordDelivery.success = delivery.success;
+    if (!delivery.success) discordDelivery.error = delivery.error;
+  }
+
+  res.json({ success: true, id, remaining: getRemainingLimits(user.id), discordDelivery });
 });
 
-app.put('/api/panels/:id', requireAuth, (req, res) => {
+app.put('/api/panels/:id', requireAuth, async (req, res) => {
   const user = req.session.user;
   const { id } = req.params;
   const panel = db.prepare('SELECT * FROM panels WHERE id = ? AND user_id = ?').get(id, user.id);
@@ -3131,13 +3351,25 @@ app.put('/api/panels/:id', requireAuth, (req, res) => {
   const script = db.prepare('SELECT * FROM scripts WHERE id = ? AND user_id = ?').get(scriptId, user.id);
   if (!script) return res.status(404).json({ error: 'Script not found' });
 
+  const wasLinkedToThisChannel = panel.channel_id === channelId;
+
   db.prepare(
     `UPDATE panels
      SET name = ?, description = ?, channel_id = ?, script_id = ?, buyer_role_id = ?, free_key_hours = ?, hwid_cooldown = ?
      WHERE id = ? AND user_id = ?`
   ).run(name, description, channelId, scriptId, buyerRoleId, freeKeyHours, hwidCooldown, id, user.id);
 
-  res.json({ success: true, id });
+  // If the panel is now linked to a new/changed Discord channel, pop it up there automatically.
+  let discordDelivery = { attempted: false, success: false };
+  if (channelId && !wasLinkedToThisChannel) {
+    discordDelivery.attempted = true;
+    const updatedPanel = db.prepare('SELECT * FROM panels WHERE id = ?').get(id);
+    const delivery = await deliverPanelToDiscord(updatedPanel, script);
+    discordDelivery.success = delivery.success;
+    if (!delivery.success) discordDelivery.error = delivery.error;
+  }
+
+  res.json({ success: true, id, discordDelivery });
 });
 
 app.post('/api/delete-panel', requireAuth, (req, res) => {
@@ -3160,26 +3392,10 @@ app.post('/api/send-panel', requireAuth, async (req, res) => {
 
   const script = db.prepare('SELECT * FROM scripts WHERE id = ?').get(panel.script_id);
   if (!script) return res.status(404).json({ error: 'Script not found' });
-  if (!client.isReady()) return res.status(503).json({ error: 'Discord bot is not connected' });
 
-  try {
-    let channel;
-    try {
-      channel = await client.channels.fetch(panel.channel_id);
-    } catch {
-      channel = null;
-    }
-
-    if (!channel) return res.status(404).json({ error: 'Discord channel not found or inaccessible' });
-    if (!channel.isTextBased()) return res.status(400).json({ error: 'Selected channel is not a text channel' });
-
-    const embed = buildPanelEmbed(panel, script);
-    await channel.send({ embeds: [embed], components: buildPanelComponents(panel) });
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Send panel error:', error);
-    res.status(500).json({ error: 'Failed to send panel' });
-  }
+  const result = await deliverPanelToDiscord(panel, script);
+  if (!result.success) return res.status(result.statusCode || 500).json({ error: result.error });
+  res.json({ success: true });
 });
 
 app.post('/api/generate-key', requireAuth, (req, res) => {
@@ -3378,7 +3594,8 @@ function pageShell({ title, body, appData = null, inlineScript = '' }) {
   <title>${escapeHtml(title)}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@600;700;800;900&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+  <meta name="theme-color" content="#040308" />
   <style>${INLINE_APP_CSS}</style>
 </head>
 <body>
@@ -3875,10 +4092,26 @@ async function registerCommands() {
       .addStringOption((option) => option.setName('panel_id').setDescription('Panel ID').setRequired(true))
       .addRoleOption((option) => option.setName('role').setDescription('Role to assign').setRequired(true)),
     new SlashCommandBuilder()
+      .setName('setup')
+      .setDescription('Set up the LuaObfuscationHub panel for this server'),
+    new SlashCommandBuilder()
       .setName('whitelist')
-      .setDescription('Whitelist a Discord user to a script')
+      .setDescription('Whitelist a Discord user to a script (auto-generates a key)')
       .addStringOption((option) => option.setName('script_id').setDescription('Script ID').setRequired(true))
-      .addUserOption((option) => option.setName('user').setDescription('User to whitelist').setRequired(true)),
+      .addUserOption((option) => option.setName('user').setDescription('User to whitelist').setRequired(true))
+      .addIntegerOption((option) => option.setName('duration').setDescription('Duration in hours (omit or 0 for permanent)').setRequired(false)),
+    new SlashCommandBuilder()
+      .setName('blacklist')
+      .setDescription('Blacklist a Discord user from a script')
+      .addStringOption((option) => option.setName('script_id').setDescription('Script ID').setRequired(true))
+      .addUserOption((option) => option.setName('user').setDescription('User to blacklist').setRequired(true)),
+    new SlashCommandBuilder()
+      .setName('deletekey')
+      .setDescription('Delete a license key')
+      .addStringOption((option) => option.setName('key').setDescription('The license key to delete').setRequired(true)),
+    new SlashCommandBuilder()
+      .setName('help')
+      .setDescription('List all available LuaObfuscationHub commands'),
     new SlashCommandBuilder()
       .setName('resethwid')
       .setDescription('Reset your linked HWID for a script')
@@ -4291,6 +4524,7 @@ client.on('interactionCreate', async (interaction) => {
       if (command === 'whitelist') {
         const scriptId = interaction.options.getString('script_id', true);
         const targetUser = interaction.options.getUser('user', true);
+        const durationHours = interaction.options.getInteger('duration') || 0;
         const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(interaction.user.id);
         if (!user) return interaction.reply({ content: 'No linked dashboard account was found for this Discord user.', ephemeral: true });
 
@@ -4302,6 +4536,7 @@ client.on('interactionCreate', async (interaction) => {
           scriptId,
           discordUserId: targetUser.id,
           discordTag: targetUser.tag,
+          durationHours,
         });
 
         const linkedPanel = getPrimaryPanelForScript(scriptId, user.id);
@@ -4323,12 +4558,118 @@ client.on('interactionCreate', async (interaction) => {
           }
         }
 
+        const durationLabel = durationHours > 0 ? `${durationHours}h` : 'Permanent';
+        const whitelistEmbed = new EmbedBuilder()
+          .setColor(BRAND_COLOR)
+          .setTitle('✅ Whitelist Granted')
+          .setDescription(
+            linkedChannelMention
+              ? `<@${targetUser.id}> You have been whitelisted!\nYou can access the script via this message --> ${linkedChannelMention}`
+              : `<@${targetUser.id}> You have been whitelisted!`
+          )
+          .addFields(
+            { name: 'Script', value: script.name, inline: true },
+            { name: 'Duration', value: durationLabel, inline: true },
+            { name: 'License Key', value: `\`${row.key}\``, inline: false }
+          )
+          .setFooter({ text: 'LuaObfuscationHub • Whitelist' })
+          .setTimestamp();
+
+        // Sent as a normal (non-ephemeral) reply so everyone in the channel can see it.
         return interaction.reply({
-          content: linkedChannelMention
-            ? `<@${targetUser.id}> You have been whitelisted!\nYou can access the script via this message --> ${linkedChannelMention}\nAssigned key: \`${row.key}\``
-            : `<@${targetUser.id}> You have been whitelisted!\nAssigned key: \`${row.key}\``,
+          content: `<@${targetUser.id}>`,
+          embeds: [whitelistEmbed],
           allowedMentions: { users: [targetUser.id] },
         });
+      }
+
+      if (command === 'blacklist') {
+        const scriptId = interaction.options.getString('script_id', true);
+        const targetUser = interaction.options.getUser('user', true);
+        const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(interaction.user.id);
+        if (!user) return interaction.reply({ content: 'No linked dashboard account was found for this Discord user.', ephemeral: true });
+
+        const script = getScriptById(scriptId);
+        if (!script || script.user_id !== user.id) return interaction.reply({ content: 'Script not found.', ephemeral: true });
+
+        const removed = removeWhitelistAccess({ scriptId, discordUserId: targetUser.id });
+
+        const blacklistEmbed = new EmbedBuilder()
+          .setColor(BRAND_COLOR_ALT)
+          .setTitle('⛔ Blacklisted')
+          .setDescription(
+            removed
+              ? `<@${targetUser.id}> has been blacklisted from **${script.name}**. Their whitelist and license key were revoked.`
+              : `<@${targetUser.id}> was not whitelisted on **${script.name}**, nothing to remove.`
+          )
+          .setFooter({ text: 'LuaObfuscationHub • Blacklist' })
+          .setTimestamp();
+
+        return interaction.reply({
+          content: `<@${targetUser.id}>`,
+          embeds: [blacklistEmbed],
+          allowedMentions: { users: [targetUser.id] },
+        });
+      }
+
+      if (command === 'deletekey') {
+        const keyValue = interaction.options.getString('key', true).toUpperCase().trim();
+        const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(interaction.user.id);
+        if (!user) return interaction.reply({ content: 'No linked dashboard account was found for this Discord user.', ephemeral: true });
+
+        const keyRecord = db.prepare('SELECT * FROM license_keys WHERE key = ? AND user_id = ?').get(keyValue, user.id);
+        if (!keyRecord) return interaction.reply({ content: 'Key not found or not owned by you.', ephemeral: true });
+
+        db.prepare('DELETE FROM license_keys WHERE key = ?').run(keyValue);
+        return interaction.reply({ content: `Key \`${keyValue}\` has been deleted.`, ephemeral: true });
+      }
+
+      if (command === 'setup') {
+        const setupEmbed = new EmbedBuilder()
+          .setColor(BRAND_COLOR)
+          .setTitle('🚀 LuaObfuscationHub Setup')
+          .setDescription(
+            [
+              'Welcome to **LuaObfuscationHub**! Here is how to get started:',
+              '',
+              `**1.** Open the dashboard: ${publicBaseUrl()}/dashboard`,
+              '**2.** Upload or paste your Lua script and save it.',
+              '**3.** Create a panel and link it to a Discord channel — it will pop up there automatically.',
+              '**4.** Use `/whitelist <script_id> <user> [duration]` to grant access and auto-generate a key.',
+              '**5.** Use `/blacklist`, `/generatekey` and `/deletekey` to manage access.',
+              '',
+              'Run `/help` at any time to see the full command list.',
+            ].join('\n')
+          )
+          .setFooter({ text: 'LuaObfuscationHub • Setup' })
+          .setTimestamp();
+
+        return interaction.reply({ embeds: [setupEmbed], ephemeral: true });
+      }
+
+      if (command === 'help') {
+        const helpEmbed = new EmbedBuilder()
+          .setColor(BRAND_COLOR)
+          .setTitle('📖 LuaObfuscationHub Commands')
+          .setDescription("Here's a list of available commands for LuaObfuscationHub:")
+          .addFields(
+            { name: '/setup', value: 'Sets up the LuaObfuscationHub panel.' },
+            {
+              name: '/whitelist',
+              value: 'Whitelists a user for a script.\n`/whitelist <script_id> <user> [duration]`\nIf duration is omitted, the whitelist is permanent. Auto-generates a key and assigns it to that person.',
+            },
+            { name: '/blacklist', value: 'Blacklists a user from a script.\n`/blacklist <script_id> <user>`' },
+            { name: '/generatekey', value: 'Generates a key.\n`/generatekey <panel_id> <hours> [note] [user]`' },
+            { name: '/deletekey', value: 'Deletes a key.\n`/deletekey <key>`' },
+            { name: '/panel', value: 'Sends a panel to the current Discord channel.' },
+            { name: '/limits', value: 'Checks your script and panel limits.' },
+            { name: '/loader', value: 'Gets the loader for a script.' },
+            { name: '/keys', value: 'Lists your recent license keys.' },
+          )
+          .setFooter({ text: 'LuaObfuscationHub • Help' })
+          .setTimestamp();
+
+        return interaction.reply({ embeds: [helpEmbed], ephemeral: true });
       }
 
       if (command === 'resethwid') {
