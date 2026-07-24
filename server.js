@@ -38,12 +38,27 @@ const DISCORD_TOKEN = process.env.DISCORD_TOKEN || '';
 const CLIENT_ID = process.env.CLIENT_ID || '';
 const CLIENT_SECRET = process.env.CLIENT_SECRET || '';
 const GUILD_ID = process.env.GUILD_ID || '';
-function defaultDatabasePath() {
-  if (process.env.DATABASE_PATH) return process.env.DATABASE_PATH;
-  if (fs.existsSync('/var/data')) return '/var/data/luaobfuscationhub.sqlite';
-  return path.join(__dirname, 'data.sqlite');
+
+function resolveDatabasePath() {
+  const fallbackPath = path.join(__dirname, 'data.sqlite');
+  const preferredPath = process.env.DATABASE_PATH || (fs.existsSync('/var/data') ? '/var/data/luaobfuscationhub.sqlite' : fallbackPath);
+
+  const ensureDir = (filePath) => {
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  };
+
+  try {
+    ensureDir(preferredPath);
+    return preferredPath;
+  } catch (error) {
+    console.warn(`Database directory unavailable for ${preferredPath}. Falling back to ${fallbackPath}.`, error.message);
+    ensureDir(fallbackPath);
+    return fallbackPath;
+  }
 }
-const DATABASE_PATH = defaultDatabasePath();
+
+const DATABASE_PATH = resolveDatabasePath();
 const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
 const PUBLIC_BASE_URL = detectPublicUrl();
 const OWNER_ID = process.env.OWNER_ID || '1207803375807373415';
@@ -166,19 +181,6 @@ CREATE TABLE IF NOT EXISTS script_whitelist (
   discord_user_id TEXT NOT NULL,
   discord_tag TEXT,
   granted_key TEXT,
-  expires_at TEXT,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY(script_id) REFERENCES scripts(id),
-  FOREIGN KEY(owner_user_id) REFERENCES users(id)
-);
-
-CREATE TABLE IF NOT EXISTS script_blacklist (
-  id TEXT PRIMARY KEY,
-  script_id TEXT NOT NULL,
-  owner_user_id TEXT NOT NULL,
-  discord_user_id TEXT NOT NULL,
-  discord_tag TEXT,
-  reason TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY(script_id) REFERENCES scripts(id),
   FOREIGN KEY(owner_user_id) REFERENCES users(id)
@@ -209,7 +211,6 @@ CREATE INDEX IF NOT EXISTS idx_license_keys_user_id ON license_keys(user_id);
 CREATE INDEX IF NOT EXISTS idx_scripts_user_id ON scripts(user_id);
 CREATE INDEX IF NOT EXISTS idx_panels_user_id ON panels(user_id);
 CREATE INDEX IF NOT EXISTS idx_whitelist_script_user ON script_whitelist(script_id, discord_user_id);
-CREATE INDEX IF NOT EXISTS idx_blacklist_script_user ON script_blacklist(script_id, discord_user_id);
 CREATE INDEX IF NOT EXISTS idx_access_bans_discord_id ON access_bans(discord_id);
 CREATE INDEX IF NOT EXISTS idx_access_bans_user_id ON access_bans(user_id);
 `);
@@ -241,7 +242,6 @@ addColumnIfMissing('scripts', "obfuscator TEXT DEFAULT 'hq99'");
 addColumnIfMissing('license_keys', 'last_hwid_reset_at TEXT');
 addColumnIfMissing('panels', 'buyer_role_id TEXT');
 addColumnIfMissing('panels', 'free_key_hours INTEGER DEFAULT 24');
-addColumnIfMissing('script_whitelist', 'expires_at TEXT');
 
 createIndexIfPossible('CREATE INDEX IF NOT EXISTS idx_scripts_public_id ON scripts(public_id);', 'scripts', 'public_id');
 
@@ -793,7 +793,7 @@ textarea { resize: vertical; }
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -1171,300 +1171,6 @@ textarea { resize: vertical; }
   .resource-title { font-size: 0.95rem; }
 }
 
-:root {
-  --bg: #060914;
-  --bg-alt: #0a1020;
-  --panel: rgba(13, 20, 37, 0.86);
-  --panel-strong: rgba(15, 24, 44, 0.98);
-  --panel-soft: rgba(18, 29, 52, 0.76);
-  --border: rgba(153, 190, 255, 0.13);
-  --border-strong: rgba(107, 215, 255, 0.42);
-  --text: #f4f8ff;
-  --muted: #8ea4c9;
-  --accent: #8fe8ff;
-  --accent-strong: #5d8cff;
-  --accent-soft: rgba(93, 140, 255, 0.15);
-  --shadow: 0 22px 70px rgba(1, 5, 15, 0.5);
-  --radius-xl: 24px;
-  --radius-lg: 18px;
-  --radius-md: 14px;
-  --radius-sm: 10px;
-}
-
-body {
-  background:
-    radial-gradient(900px 520px at 8% -12%, rgba(59, 119, 255, 0.22), transparent 62%),
-    radial-gradient(700px 500px at 96% 0%, rgba(53, 211, 255, 0.13), transparent 64%),
-    linear-gradient(160deg, #050812 0%, #0a1020 52%, #050812 100%);
-}
-
-body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.2;
-  background-image: radial-gradient(rgba(190, 223, 255, 0.22) 0.6px, transparent 0.6px);
-  background-size: 18px 18px;
-  mask-image: linear-gradient(to bottom, black, transparent 80%);
-}
-
-.panel {
-  border-color: rgba(153, 190, 255, 0.13);
-  background: linear-gradient(145deg, rgba(18, 28, 50, 0.9), rgba(9, 16, 30, 0.88));
-  box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,0.035);
-}
-
-.dashboard-shell {
-  max-width: 1560px;
-  margin: 0 auto;
-  grid-template-columns: 232px minmax(0, 1fr);
-  gap: 14px;
-  padding: 14px;
-}
-
-.sidebar {
-  padding: 14px;
-  gap: 14px;
-  border-radius: 20px;
-  background: linear-gradient(180deg, rgba(13, 23, 43, 0.94), rgba(8, 14, 27, 0.9));
-}
-
-.brand-mark.small {
-  width: 40px;
-  height: 40px;
-  border-radius: 13px;
-  font-size: 16px;
-  background: linear-gradient(135deg, #9beaff 0%, #6f9cff 54%, #665bff 100%);
-  color: #07111d;
-  box-shadow: 0 10px 28px rgba(79, 143, 255, 0.32);
-}
-
-.brand-name { letter-spacing: -0.02em; }
-.sidebar-caption { font-size: 0.69rem; letter-spacing: 0.02em; }
-
-.user-summary {
-  padding: 11px;
-  border-radius: 13px;
-  background: rgba(255,255,255,0.035);
-}
-
-.avatar {
-  width: 38px;
-  height: 38px;
-  border-radius: 11px;
-}
-
-.nav-list { gap: 4px; }
-.nav-link {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 9px 10px;
-  font-size: 0.86rem;
-  color: #a8badd;
-}
-.nav-link::before {
-  content: "";
-  width: 5px;
-  height: 5px;
-  flex: 0 0 5px;
-  border-radius: 50%;
-  background: currentColor;
-  opacity: 0.5;
-}
-.nav-link.active::before { opacity: 1; box-shadow: 0 0 12px currentColor; }
-.nav-link.active {
-  background: linear-gradient(90deg, rgba(110, 220, 255, 0.16), rgba(93, 140, 255, 0.08));
-  border-color: rgba(110, 220, 255, 0.2);
-}
-
-.content-area { gap: 12px; }
-.topbar {
-  padding: 14px 16px;
-  min-height: 72px;
-  border-radius: 18px;
-}
-.topbar .stack { gap: 4px; }
-.eyebrow { font-size: 0.64rem; letter-spacing: 0.18em; }
-.page-title { font-size: clamp(1.35rem, 2.5vw, 1.95rem); }
-.topbar-actions { gap: 8px; }
-.mobile-menu-button { display: none; }
-
-.stats-grid { gap: 10px; }
-.stat-card {
-  min-height: 106px;
-  padding: 14px;
-  gap: 9px;
-  transition: transform .18s ease, border-color .18s ease;
-}
-.stat-card:hover { transform: translateY(-2px); border-color: rgba(111, 220, 255, 0.28); }
-.stat-card::after {
-  content: "";
-  width: 42px;
-  height: 3px;
-  border-radius: 99px;
-  background: linear-gradient(90deg, var(--accent), var(--accent-strong));
-  opacity: 0.75;
-}
-.stat-value { font-size: 1.75rem; letter-spacing: -0.04em; }
-.stat-label, .stat-meta { font-size: 0.74rem; }
-
-.section-card { padding: 16px; border-radius: 18px; }
-.section-header { margin-bottom: 14px; }
-.section-header h2 { letter-spacing: -0.025em; }
-.resource-grid { gap: 10px; }
-.resource-card {
-  padding: 14px;
-  border-radius: 15px;
-  gap: 12px;
-  box-shadow: 0 14px 38px rgba(2, 8, 18, 0.28);
-}
-.resource-card:hover { transform: translateY(-2px); }
-.resource-title { font-size: 0.94rem; }
-.resource-meta { font-size: 0.78rem; }
-.badge { padding: 5px 8px; font-size: 0.68rem; }
-.meta-item { font-size: 0.8rem; }
-.button { min-height: 38px; border-radius: 10px; font-size: 0.84rem; }
-.button.small { min-height: 32px; border-radius: 9px; font-size: 0.76rem; }
-.button.primary {
-  background: linear-gradient(135deg, #9cecff 0%, #68caff 37%, #6688ff 100%);
-  box-shadow: 0 10px 25px rgba(71, 132, 255, 0.22);
-}
-.count-badge, .live-pill { padding: 7px 10px; font-size: 0.72rem; }
-
-.overview-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(280px, .75fr);
-  gap: 10px;
-}
-.overview-hero {
-  min-height: 208px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 18px;
-  background:
-    radial-gradient(circle at 88% 14%, rgba(120, 224, 255, 0.18), transparent 28%),
-    linear-gradient(135deg, rgba(24, 43, 78, 0.96), rgba(11, 20, 38, 0.94));
-}
-.overview-hero h2 { max-width: 470px; font-size: clamp(1.35rem, 3vw, 2rem); letter-spacing: -0.04em; }
-.overview-hero p { max-width: 530px; color: #a9bddf; font-size: .88rem; }
-.overview-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.overview-side { display: grid; gap: 10px; }
-.pulse-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 0;
-  border-bottom: 1px solid rgba(153,190,255,.09);
-}
-.pulse-row:last-child { border-bottom: 0; }
-.pulse-icon {
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  border-radius: 9px;
-  color: var(--accent);
-  background: rgba(111,220,255,.1);
-  font-size: .7rem;
-  font-weight: 800;
-}
-.pulse-copy { min-width: 0; }
-.pulse-copy strong, .pulse-copy span { display: block; }
-.pulse-copy strong { font-size: .78rem; }
-.pulse-copy span { color: var(--muted); font-size: .72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mini-label { color: var(--muted); text-transform: uppercase; letter-spacing: .12em; font-size: .62rem; font-weight: 700; }
-.panel-preview {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 230px;
-  gap: 12px;
-}
-.discord-preview {
-  position: relative;
-  overflow: hidden;
-  padding: 16px;
-  border-radius: 16px;
-  border: 1px solid rgba(153,190,255,.12);
-  background: linear-gradient(145deg, rgba(25, 37, 64, .94), rgba(12, 19, 35, .96));
-}
-.discord-preview::before {
-  content: "";
-  position: absolute;
-  width: 180px;
-  height: 180px;
-  right: -70px;
-  top: -90px;
-  border-radius: 50%;
-  background: rgba(113, 215, 255, .13);
-  filter: blur(2px);
-}
-.preview-kicker { color: var(--accent); font-size: .68rem; text-transform: uppercase; letter-spacing: .14em; font-weight: 800; }
-.preview-title { margin-top: 7px; font-size: 1.05rem; font-weight: 800; }
-.preview-copy { margin-top: 5px; color: var(--muted); font-size: .78rem; }
-.access-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
-.access-strip span { padding: 5px 8px; border-radius: 7px; font-size: .67rem; background: rgba(255,255,255,.055); color: #c3d3ed; }
-.access-strip span.is-on { color: #caffda; background: rgba(74,222,128,.1); }
-.preview-actions { display: grid; gap: 7px; margin-top: 16px; }
-.preview-actions .button { width: 100%; }
-.panel-settings { display: grid; gap: 8px; align-content: start; }
-.setting-line { display: flex; justify-content: space-between; gap: 8px; padding: 9px 0; border-bottom: 1px solid rgba(153,190,255,.08); font-size: .75rem; }
-.setting-line span:last-child { color: var(--muted); text-align: right; }
-.filter-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
-.filter-toolbar input { flex: 1 1 220px; min-width: 0; padding: 10px 12px; }
-.filter-pill { cursor: pointer; padding: 7px 10px; color: var(--muted); font-size: .72rem; }
-.filter-pill.active { color: var(--text); border-color: rgba(111,220,255,.26); background: rgba(111,220,255,.1); }
-.whitelist-card { border-color: rgba(117, 184, 255, .2); }
-.whitelist-card .resource-title { display: flex; align-items: center; gap: 7px; }
-.whitelist-card .resource-title::before { content: "✓"; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 6px; color: #061522; background: #84eab1; font-size: .68rem; }
-
-@media (max-width: 980px) {
-  .dashboard-shell { grid-template-columns: 1fr; }
-  .sidebar {
-    position: fixed;
-    z-index: 50;
-    inset: 12px auto 12px 12px;
-    width: min(280px, calc(100vw - 24px));
-    height: auto;
-    transform: translateX(-115%);
-    transition: transform .22s ease;
-    box-shadow: 20px 0 60px rgba(0,0,0,.45);
-  }
-  .sidebar.mobile-open { transform: translateX(0); }
-  .sidebar::after {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: -1;
-    pointer-events: none;
-  }
-  .mobile-menu-button { display: inline-flex; }
-  .panel-preview { grid-template-columns: 1fr; }
-}
-
-@media (max-width: 680px) {
-  .dashboard-shell { padding: 8px; }
-  .topbar { align-items: flex-start; padding: 12px; }
-  .topbar-actions { width: 100%; justify-content: flex-start; }
-  .topbar-actions .button { flex: 0 0 auto; width: auto; }
-  .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .stat-card { min-height: 92px; padding: 12px; }
-  .overview-grid { grid-template-columns: 1fr; }
-  .section-card { padding: 13px; }
-  .section-header { align-items: flex-start; }
-  .section-header .count-badge { flex: 0 0 auto; }
-}
-
-@media (max-width: 420px) {
-  .stats-grid { gap: 7px; }
-  .stat-value { font-size: 1.45rem; }
-  .stat-card { min-height: 84px; }
-  .topbar-actions .live-pill { display: none; }
-  .overview-hero { min-height: 230px; padding: 14px; }
-  .overview-actions .button { flex: 1 1 100%; }
-}
-
 
 */});
 
@@ -1518,31 +1224,26 @@ const defaults = APP.defaults || { maxScripts: 100, maxPanels: 50 };
 const baseUrl = APP.baseUrl || window.location.origin;
 
 const viewTitles = {
-  overview: 'Overview',
   scripts: 'Scripts',
   panels: 'Panels',
   keys: 'Keys',
-  whitelist: 'Whitelist',
   hwids: 'HWID Bans',
   admin: 'Admin',
 };
 
 const viewDescriptions = {
-  overview: 'A live read on your protected script workspace and access layer.',
   scripts: 'Manage hosted scripts, loadstrings, FFA mode, and upload flow.',
   panels: 'Create polished Discord panels and role-enabled access buttons.',
   keys: 'Generate, assign, copy, and revoke access keys.',
-  whitelist: 'Grant durable script access to trusted Discord users without sharing keys.',
   hwids: 'Manage blocked hardware identifiers and enforcement.',
   admin: 'Create API keys, edit limits, and blacklist Discord IDs from website access.',
 };
 
-let currentView = 'overview';
+let currentView = 'scripts';
 let currentData = {
   scripts: [],
   panels: [],
   keys: [],
-  whitelist: [],
   bannedHWIDs: [],
   accessBans: [],
   limits: {
@@ -1668,79 +1369,6 @@ function updateSummary() {
   qs('statKeysMeta').textContent = `${activeKeys} active keys`;
   qs('statHwids').textContent = `${currentData.bannedHWIDs?.length || 0}`;
   qs('statHwidsMeta').textContent = 'Tracked block entries';
-  if (qs('statWhitelist')) qs('statWhitelist').textContent = `${currentData.whitelist?.length || 0}`;
-  if (qs('statWhitelistMeta')) qs('statWhitelistMeta').textContent = 'Trusted access grants';
-}
-
-function renderWhitelist() {
-  const list = qs('whitelistList');
-  if (!list) return;
-  const rows = currentData.whitelist || [];
-  qs('whitelistCount').textContent = `${rows.length} grants`;
-  if (!rows.length) {
-    list.innerHTML = emptyState('No trusted users yet. Add a Discord ID to grant permanent access to a script.');
-    return;
-  }
-
-  list.innerHTML = rows.map((row) => `
-    <article class="resource-card whitelist-card">
-      <div class="resource-header">
-        <div>
-          <div class="resource-title">${escapeHtml(row.discord_tag || row.discord_user_id)}</div>
-          <div class="resource-meta">${escapeHtml(row.discord_user_id)} · granted ${escapeHtml(formatDate(row.created_at))}</div>
-        </div>
-        <div class="badge-row">${badge('Trusted access', 'success')}</div>
-      </div>
-      <div class="meta-list">
-        <div class="meta-item"><strong>Script</strong><span>${escapeHtml(row.script_name || row.script_id)}</span></div>
-        <div class="meta-item"><strong>Granted key</strong><span>${escapeHtml(row.granted_key || 'Managed automatically')}</span></div>
-        <div class="meta-item"><strong>Access mode</strong><span>Permanent whitelist</span></div>
-      </div>
-      <div class="action-row">
-        ${row.granted_key ? `<button class="button secondary small" onclick='copyText(${JSON.stringify(row.granted_key)})'>Copy key</button>` : ''}
-        <button class="button danger small" onclick="removeWhitelist('${escapeHtml(row.id)}')">Remove access</button>
-      </div>
-    </article>
-  `).join('');
-}
-
-async function addWhitelist() {
-  const scriptId = qs('whitelistScriptId')?.value;
-  const discordUserId = qs('whitelistDiscordUserId')?.value.trim();
-  const discordTag = qs('whitelistDiscordTag')?.value.trim();
-  if (!scriptId || !discordUserId) {
-    notify('Missing fields', 'Select a script and enter a Discord user ID.', 'error');
-    return;
-  }
-
-  try {
-    const data = await requestJSON('/api/whitelist', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scriptId, discordUserId, discordTag }),
-    });
-    qs('whitelistDiscordUserId').value = '';
-    qs('whitelistDiscordTag').value = '';
-    await loadData({ silent: true });
-    notify('Access granted', `${data.discordTag || discordUserId} is now whitelisted.`);
-  } catch (error) {
-    notify('Whitelist failed', error.message || 'Unable to grant script access.', 'error');
-  }
-}
-
-async function removeWhitelist(id) {
-  if (!confirm('Remove this trusted access grant?')) return;
-  try {
-    await requestJSON('/api/remove-whitelist', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id }),
-    });
-    await loadData({ silent: true });
-    notify('Access removed', 'The whitelist grant was removed.');
-  } catch (error) {
-    notify('Remove failed', error.message || 'Unable to remove whitelist access.', 'error');
-  }
 }
 
 function renderScripts() {
@@ -1879,22 +1507,20 @@ function editScript(id) {
 }
 
 function updatePanelPreview() {
-  const name = qs('panelName')?.value.trim() || 'Release panel';
-  const description = qs('panelDescription')?.value.trim() || 'yo';
+  const name = qs('panelName')?.value.trim() || 'Panel Preview';
+  const customDescription = qs('panelDescription')?.value.trim();
   const scriptId = qs('panelScriptId')?.value || '';
   const buyerRoleId = qs('panelBuyerRoleId')?.value.trim() || 'Not set';
-  const freeKeyHours = Number(qs('panelFreeKeyHours')?.value) || 0;
   const hwidCooldown = Number(qs('panelHwidCooldown')?.value) || 0;
   const script = getScriptById(scriptId);
 
-  qs('panelPreviewTitle').textContent = `🔷 ${name}`;
-  qs('panelPreviewDescription').textContent = description || 'yo';
-  qs('panelPreviewScriptBadge').textContent = script ? `📜 ${script.name}` : '📜 No script selected';
-  const accessBadge = qs('panelPreviewAccessBadge');
-  accessBadge.textContent = script?.ffa_mode ? '🔓 Open Access' : '🔑 Key Required';
-  accessBadge.className = `badge ${script?.ffa_mode ? 'warning' : 'success'}`;
+  const description = customDescription || `This control panel is for the project: ${script?.name || name}. If you're a buyer, click the buttons below to redeem your key, get the script or get your role.`;
+
+  qs('panelPreviewTitle').textContent = name;
+  qs('panelPreviewDescription').textContent = description;
+  qs('panelPreviewScriptBadge').textContent = script ? script.name : 'No script selected';
+  qs('panelPreviewAccessBadge').textContent = script?.ffa_mode ? 'Open Access' : 'Key Required';
   qs('panelPreviewRole').textContent = buyerRoleId;
-  qs('panelPreviewFreeKey').textContent = freeKeyHours > 0 ? `${freeKeyHours} hours` : 'Disabled';
   qs('panelPreviewHwid').textContent = `${hwidCooldown || 0} seconds`;
 }
 
@@ -2138,16 +1764,6 @@ function updateSelects() {
     });
     if ([...keyPanelSelect.options].some((option) => option.value === current)) keyPanelSelect.value = current;
   }
-
-  const whitelistScriptSelect = qs('whitelistScriptId');
-  if (whitelistScriptSelect) {
-    const current = whitelistScriptSelect.value;
-    whitelistScriptSelect.innerHTML = '<option value="">Select protected script</option>';
-    scripts.forEach((script) => {
-      whitelistScriptSelect.innerHTML += `<option value="${escapeHtml(script.id)}">${escapeHtml(script.name)}</option>`;
-    });
-    if ([...whitelistScriptSelect.options].some((option) => option.value === current)) whitelistScriptSelect.value = current;
-  }
 }
 
 function renderAll() {
@@ -2155,7 +1771,6 @@ function renderAll() {
   renderScripts();
   renderPanels();
   renderKeys();
-  renderWhitelist();
   renderHwids();
   updateSelects();
   updatePanelPreview();
@@ -2590,16 +2205,10 @@ function attachEditor() {
 }
 
 function attachEvents() {
-  document.querySelectorAll('[data-view]').forEach((button) => {
-    button.addEventListener('click', () => {
-      setView(button.dataset.view);
-      qs('sidebar')?.classList.remove('mobile-open');
-    });
+  document.querySelectorAll('.nav-link[data-view]').forEach((button) => {
+    button.addEventListener('click', () => setView(button.dataset.view));
   });
 
-  qs('mobileMenuButton')?.addEventListener('click', () => {
-    qs('sidebar')?.classList.toggle('mobile-open');
-  });
   qs('refreshButton')?.addEventListener('click', async () => {
     await loadData({ silent: false });
     if (currentView === 'admin') await loadApiKeys({ silent: false });
@@ -2612,7 +2221,6 @@ function attachEvents() {
   qs('cancelPanelEditButton')?.addEventListener('click', resetPanelForm);
   qs('generateKeyButton')?.addEventListener('click', generateKey);
   qs('cancelKeyEditButton')?.addEventListener('click', resetKeyForm);
-  qs('addWhitelistButton')?.addEventListener('click', addWhitelist);
   qs('banHwidButton')?.addEventListener('click', banHwid);
   qs('adminGenerateKeyButton')?.addEventListener('click', adminGenerateKey);
   qs('adminUpdateLimitsButton')?.addEventListener('click', adminUpdateLimits);
@@ -2637,8 +2245,6 @@ window.deletePanel = deletePanel;
 window.generateKey = generateKey;
 window.editKey = editKey;
 window.deleteKey = deleteKey;
-window.addWhitelist = addWhitelist;
-window.removeWhitelist = removeWhitelist;
 window.banHwid = banHwid;
 window.unbanHwid = unbanHwid;
 window.adminGenerateKey = adminGenerateKey;
@@ -2651,7 +2257,7 @@ window.copyText = copyText;
 
 attachEvents();
 attachEditor();
-setPageMeta('overview');
+setPageMeta('scripts');
 loadData({ silent: true });
 if (currentUser.is_owner) loadApiKeys({ silent: true });
 
@@ -2771,24 +2377,6 @@ function getScriptById(scriptId) {
   return db.prepare('SELECT * FROM scripts WHERE id = ?').get(scriptId);
 }
 
-function getOwnedScriptForDiscord(scriptRef, discordId) {
-  const owner = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(discordId);
-  if (!owner) return { owner: null, script: null };
-
-  const reference = String(scriptRef || '').trim();
-  if (!reference) return { owner, script: null };
-
-  const script = db.prepare(
-    `SELECT * FROM scripts
-     WHERE user_id = ?
-       AND (id = ? OR public_id = ? OR lower(name) = lower(?))
-     ORDER BY CASE WHEN id = ? THEN 0 WHEN public_id = ? THEN 1 ELSE 2 END
-     LIMIT 1`
-  ).get(owner.id, reference, reference, reference, reference, reference);
-
-  return { owner, script: script || null };
-}
-
 function getScriptByPublicId(publicId) {
   return db.prepare('SELECT * FROM scripts WHERE public_id = ?').get(publicId);
 }
@@ -2841,20 +2429,7 @@ function getLatestActiveClaimedKey(scriptId, discordUserId) {
   return rows.find((row) => !isExpired(row.expires_at)) || null;
 }
 
-function isScriptBlacklisted(scriptId, discordUserId) {
-  if (!scriptId || !discordUserId) return false;
-  return Boolean(
-    db.prepare(
-      'SELECT id FROM script_blacklist WHERE script_id = ? AND discord_user_id = ?'
-    ).get(scriptId, discordUserId)
-  );
-}
-
-function ensureWhitelistAccess({ ownerUserId, scriptId, discordUserId, discordTag, expiresAt = null }) {
-  if (isScriptBlacklisted(scriptId, discordUserId)) {
-    throw new Error('This Discord user is blacklisted from the script.');
-  }
-
+function ensureWhitelistAccess({ ownerUserId, scriptId, discordUserId, discordTag }) {
   let whitelist = db.prepare(
     'SELECT * FROM script_whitelist WHERE script_id = ? AND discord_user_id = ?'
   ).get(scriptId, discordUserId);
@@ -2862,16 +2437,10 @@ function ensureWhitelistAccess({ ownerUserId, scriptId, discordUserId, discordTa
   if (whitelist?.granted_key) {
     const existingKey = db.prepare('SELECT * FROM license_keys WHERE key = ?').get(whitelist.granted_key);
     if (existingKey && !isExpired(existingKey.expires_at)) {
-      if (expiresAt !== null) {
-        db.prepare('UPDATE license_keys SET expires_at = ? WHERE key = ?').run(expiresAt, existingKey.key);
-        db.prepare('UPDATE script_whitelist SET expires_at = ? WHERE id = ?').run(expiresAt, whitelist.id);
-      } else {
-        db.prepare('UPDATE script_whitelist SET expires_at = NULL WHERE id = ?').run(whitelist.id);
-      }
       if (!existingKey.claimed_by) {
         db.prepare('UPDATE license_keys SET claimed_by = ?, claimed_tag = ? WHERE key = ?').run(discordUserId, discordTag, existingKey.key);
       }
-      return db.prepare('SELECT * FROM license_keys WHERE key = ?').get(existingKey.key);
+      return existingKey;
     }
   }
 
@@ -2879,20 +2448,20 @@ function ensureWhitelistAccess({ ownerUserId, scriptId, discordUserId, discordTa
     scriptId,
     userId: ownerUserId,
     note: `Whitelist for ${discordTag}`,
-    expiresAt,
+    expiresAt: null,
     claimedBy: discordUserId,
     claimedTag: discordTag,
   });
 
   if (whitelist) {
     db.prepare(
-      'UPDATE script_whitelist SET discord_tag = ?, granted_key = ?, expires_at = ? WHERE id = ?'
-    ).run(discordTag, newKey.key, expiresAt, whitelist.id);
+      'UPDATE script_whitelist SET discord_tag = ?, granted_key = ? WHERE id = ?'
+    ).run(discordTag, newKey.key, whitelist.id);
   } else {
     db.prepare(
-      `INSERT INTO script_whitelist (id, script_id, owner_user_id, discord_user_id, discord_tag, granted_key, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(makeId('wl'), scriptId, ownerUserId, discordUserId, discordTag, newKey.key, expiresAt);
+      `INSERT INTO script_whitelist (id, script_id, owner_user_id, discord_user_id, discord_tag, granted_key)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(makeId('wl'), scriptId, ownerUserId, discordUserId, discordTag, newKey.key);
   }
 
   return newKey;
@@ -2900,48 +2469,48 @@ function ensureWhitelistAccess({ ownerUserId, scriptId, discordUserId, discordTa
 
 function canDiscordUserAccessScript(scriptId, discordUserId) {
   if (!discordUserId) return false;
-  if (isScriptBlacklisted(scriptId, discordUserId)) return false;
   const key = getLatestActiveClaimedKey(scriptId, discordUserId);
   if (key) return true;
   const whitelist = db.prepare(
     'SELECT * FROM script_whitelist WHERE script_id = ? AND discord_user_id = ?'
   ).get(scriptId, discordUserId);
-  return Boolean(whitelist && !isExpired(whitelist.expires_at));
+  return Boolean(whitelist);
+}
+
+const PANEL_WHITELIST_REQUIRED_MESSAGE = 'You need to be whitelisted on this panel first. Ask the owner of scripts to run `/whitelist`.';
+
+function getPanelOwner(panel) {
+  return db.prepare('SELECT username, discord_id FROM users WHERE id = ?').get(panel.user_id) || null;
 }
 
 function buildPanelEmbed(panel, script) {
+  const owner = getPanelOwner(panel);
   return new EmbedBuilder()
     .setColor(BRAND_COLOR)
-    .setTitle(`🔷 ${panel.name}`)
-    .setDescription(panel.description || 'yo')
-    .addFields(
-      { name: '📜 Script', value: script.name, inline: true },
-      { name: '📊 Status', value: script.status === 'active' ? 'Active' : 'Disabled', inline: true },
-      { name: '🧩 Version', value: script.version || '1.0.0', inline: true }
+    .setTitle(panel.name)
+    .setDescription(
+      panel.description ||
+      `This control panel is for the project: **${script.name}**\nIf you're a buyer, click on the buttons below to redeem your key, get the script or get your role`
     )
-    .setFooter({ text: 'LuaObfuscationHub | v5' });
+    .setFooter({ text: `Sent by ${owner?.username || 'owner'} • ${new Date().toLocaleString()}` });
 }
 
 function buildPanelComponents(panel) {
   const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`panelview_${panel.id}`).setLabel('📜 View Script').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`panelredeem_${panel.id}`).setLabel('🔑 Redeem Key').setStyle(ButtonStyle.Success)
+    new ButtonBuilder().setCustomId(`panelredeem_${panel.id}`).setLabel('🔑 Redeem Key').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`panelscript_${panel.id}`).setLabel('📜 Get Script').setStyle(ButtonStyle.Primary)
   );
 
   const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`panelkeyinfo_${panel.id}`).setLabel('📊 Key Info').setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(`panelrole_${panel.id}`).setLabel('👤 Get Role').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`panelresethwid_${panel.id}`).setLabel('⚙️ Reset HWID').setStyle(ButtonStyle.Secondary)
   );
 
   const row3 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`panelbuyerrole_${panel.id}`).setLabel('👤 Get Buyer Role').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`panelfreekey_${panel.id}`).setLabel('🔗 Free Key').setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(`panelstats_${panel.id}`).setLabel('📊 Get Stats').setStyle(ButtonStyle.Secondary)
   );
 
-  const row4 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`panelresethwid_${panel.id}`).setLabel('⚙️ Reset HWID').setStyle(ButtonStyle.Danger)
-  );
-
-  return [row1, row2, row3, row4];
+  return [row1, row2, row3];
 }
 
 function buildMobileViewButton(customId) {
@@ -3676,71 +3245,11 @@ app.post('/api/unban-hwid', requireAuth, (req, res) => {
   res.json({ success: true });
 });
 
-app.post('/api/whitelist', requireAuth, (req, res) => {
-  const user = req.session.user;
-  const scriptId = String(req.body.scriptId || '').trim();
-  const discordUserId = String(req.body.discordUserId || '').trim();
-  const discordTag = String(req.body.discordTag || '').trim();
-
-  if (!scriptId || !discordUserId) {
-    return res.status(400).json({ error: 'Script and Discord user ID are required' });
-  }
-
-  const script = db.prepare('SELECT * FROM scripts WHERE id = ? AND user_id = ?').get(scriptId, user.id);
-  if (!script) return res.status(404).json({ error: 'Script not found' });
-
-  const row = ensureWhitelistAccess({
-    ownerUserId: user.id,
-    scriptId,
-    discordUserId,
-    discordTag: discordTag || discordUserId,
-  });
-
-  res.json({
-    success: true,
-    key: row.key,
-    discordTag: discordTag || discordUserId,
-  });
-});
-
-app.post('/api/remove-whitelist', requireAuth, (req, res) => {
-  const id = String(req.body.id || '').trim();
-  if (!id) return res.status(400).json({ error: 'Whitelist entry ID required' });
-
-  const entry = db.prepare(
-    'SELECT granted_key FROM script_whitelist WHERE id = ? AND owner_user_id = ?'
-  ).get(id, req.session.user.id);
-  if (!entry) return res.status(404).json({ error: 'Whitelist entry not found' });
-
-  const remove = db.transaction(() => {
-    if (entry.granted_key) {
-      db.prepare('DELETE FROM license_keys WHERE key = ? AND user_id = ?').run(
-        entry.granted_key,
-        req.session.user.id
-      );
-    }
-    return db.prepare(
-      'DELETE FROM script_whitelist WHERE id = ? AND owner_user_id = ?'
-    ).run(id, req.session.user.id);
-  });
-  const result = remove();
-
-  if (!result.changes) return res.status(404).json({ error: 'Whitelist entry not found' });
-  res.json({ success: true });
-});
-
 app.get('/api/data', requireAuth, (req, res) => {
   const user = req.session.user;
   const scripts = db.prepare('SELECT * FROM scripts WHERE user_id = ? ORDER BY created_at DESC').all(user.id);
   const panels = db.prepare('SELECT * FROM panels WHERE user_id = ? ORDER BY created_at DESC').all(user.id);
   const keys = db.prepare('SELECT * FROM license_keys WHERE user_id = ? ORDER BY created_at DESC').all(user.id);
-  const whitelist = db.prepare(
-    `SELECT script_whitelist.*, scripts.name AS script_name
-     FROM script_whitelist
-     JOIN scripts ON scripts.id = script_whitelist.script_id
-     WHERE script_whitelist.owner_user_id = ?
-     ORDER BY script_whitelist.created_at DESC`
-  ).all(user.id);
   const bannedHWIDs = user.is_owner
     ? db.prepare('SELECT * FROM banned_hwids ORDER BY created_at DESC').all()
     : db.prepare('SELECT * FROM banned_hwids WHERE banned_by = ? ORDER BY created_at DESC').all(user.id);
@@ -3753,7 +3262,6 @@ app.get('/api/data', requireAuth, (req, res) => {
     scripts,
     panels,
     keys,
-    whitelist,
     bannedHWIDs,
     accessBans,
     limits,
@@ -3774,9 +3282,6 @@ function sendScriptContent(script, key, hwid, res) {
   const keyRecord = db.prepare('SELECT * FROM license_keys WHERE key = ? AND script_id = ?').get(key, script.id);
   if (!keyRecord) return res.status(403).type('text/plain').send('-- Invalid key');
   if (isExpired(keyRecord.expires_at)) return res.status(403).type('text/plain').send('-- Key expired');
-  if (keyRecord.claimed_by && isScriptBlacklisted(script.id, keyRecord.claimed_by)) {
-    return res.status(403).type('text/plain').send('-- User blacklisted');
-  }
 
   if (hwid) {
     const banned = db.prepare('SELECT * FROM banned_hwids WHERE hwid = ?').get(hwid);
@@ -3926,7 +3431,7 @@ app.get('/dashboard', requireAuth, (req, res) => {
   const body = `
     <div class="site-bg"></div>
     <div class="dashboard-shell">
-      <aside id="sidebar" class="sidebar panel">
+      <aside class="sidebar panel">
         <div class="brand-row">
           <div class="brand-mark small">L</div>
           <div>
@@ -3944,11 +3449,9 @@ app.get('/dashboard', requireAuth, (req, res) => {
         </div>
 
         <nav class="nav-list">
-          <button class="nav-link active" data-view="overview">Overview</button>
-          <button class="nav-link" data-view="scripts">Scripts</button>
+          <button class="nav-link active" data-view="scripts">Scripts</button>
           <button class="nav-link" data-view="panels">Panels</button>
           <button class="nav-link" data-view="keys">Keys</button>
-          <button class="nav-link" data-view="whitelist">Whitelist</button>
           <button class="nav-link" data-view="hwids">HWID bans</button>
           ${user.is_owner ? '<button class="nav-link" data-view="admin">Admin</button>' : ''}
         </nav>
@@ -3970,7 +3473,6 @@ app.get('/dashboard', requireAuth, (req, res) => {
             <p class="muted" id="pageSubtitle">Manage hosted scripts, loadstrings, FFA mode, and upload flow.</p>
           </div>
           <div class="topbar-actions">
-            <button class="button secondary mobile-menu-button" id="mobileMenuButton" type="button">Menu</button>
             <button class="button secondary" id="refreshButton">Refresh</button>
             <div class="live-pill"><span class="live-dot"></span> Live sync</div>
           </div>
@@ -3997,83 +3499,9 @@ app.get('/dashboard', requireAuth, (req, res) => {
             <strong class="stat-value" id="statHwids">0</strong>
             <span class="stat-meta" id="statHwidsMeta">Current entries</span>
           </article>
-          <article class="stat-card panel">
-            <span class="stat-label">Whitelist</span>
-            <strong class="stat-value" id="statWhitelist">0</strong>
-            <span class="stat-meta" id="statWhitelistMeta">Trusted access grants</span>
-          </article>
         </section>
 
-        <section id="view-overview" class="view active stack-xl">
-          <div class="overview-grid">
-            <article class="panel overview-hero">
-              <div>
-                <p class="eyebrow">Security workspace</p>
-                <h2>Your access layer is ready for the next release.</h2>
-                <p>Ship protected Lua scripts with clear Discord access, managed keys, and trusted whitelist grants in one compact workspace.</p>
-              </div>
-              <div class="overview-actions">
-                <button class="button primary" data-view="scripts">Add a script</button>
-                <button class="button secondary" data-view="whitelist">Manage whitelist</button>
-              </div>
-            </article>
-            <article class="panel section-card">
-              <div class="section-header">
-                <div>
-                  <p class="mini-label">Protection pulse</p>
-                  <h2>Live safeguards</h2>
-                </div>
-                <span class="badge success">Healthy</span>
-              </div>
-              <div class="pulse-row">
-                <span class="pulse-icon">01</span>
-                <div class="pulse-copy"><strong>Hosted delivery</strong><span>Protected loader paths online</span></div>
-              </div>
-              <div class="pulse-row">
-                <span class="pulse-icon">02</span>
-                <div class="pulse-copy"><strong>Access control</strong><span>Keys and whitelist grants enforced</span></div>
-              </div>
-              <div class="pulse-row">
-                <span class="pulse-icon">03</span>
-                <div class="pulse-copy"><strong>HWID layer</strong><span>Blocked devices checked at load time</span></div>
-              </div>
-            </article>
-          </div>
-
-          <div class="panel section-card">
-            <div class="section-header">
-              <div>
-                <p class="mini-label">Discord access panel</p>
-                <h2>Give buyers a cleaner path to access</h2>
-                <p class="muted">A compact panel flow with key redemption, trusted whitelist access, role delivery, and HWID reset controls.</p>
-              </div>
-              <button class="button secondary small" data-view="panels">Open builder</button>
-            </div>
-            <div class="panel-preview">
-              <div class="discord-preview">
-                <div class="preview-kicker">Protected release</div>
-                <div class="preview-title">Nebula / private build</div>
-                <div class="preview-copy">A single access surface for verified buyers and trusted testers.</div>
-                <div class="access-strip">
-                  <span class="is-on">Protected</span><span>Key required</span><span>HWID locked</span>
-                </div>
-                <div class="preview-actions">
-                  <button class="button primary small" data-view="keys">Generate access key</button>
-                  <button class="button secondary small" data-view="whitelist">Grant trusted access</button>
-                </div>
-              </div>
-              <div class="panel-settings">
-                <div class="mini-label">Included controls</div>
-                <div class="setting-line"><span>Key redemption</span><span>Enabled</span></div>
-                <div class="setting-line"><span>Buyer role</span><span>Optional</span></div>
-                <div class="setting-line"><span>Free key</span><span>24 hours</span></div>
-                <div class="setting-line"><span>HWID reset</span><span>180 seconds</span></div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section id="view-scripts" class="view stack-xl">
+        <section id="view-scripts" class="view active stack-xl">
           <div class="panel section-card">
             <div class="section-header">
               <div>
@@ -4168,40 +3596,33 @@ app.get('/dashboard', requireAuth, (req, res) => {
             </div>
 
             <div class="section-stack">
-              <div class="resource-card">
-                <div class="resource-header">
-                  <div>
-                    <div class="resource-title" id="panelPreviewTitle">🔷 Release panel</div>
-                    <div class="resource-meta" id="panelPreviewDescription">yo</div>
+                <div class="resource-card">
+                  <div class="resource-header">
+                    <div>
+                      <div class="resource-title" id="panelPreviewTitle">Panel Preview</div>
+                      <div class="resource-meta" id="panelPreviewDescription">This control panel is for the project: Panel Preview. If you're a buyer, click the buttons below to redeem your key, get the script or get your role.</div>
+                    </div>
                   </div>
-                  <div class="badge-row">
-                    <span class="badge info" id="panelPreviewScriptBadge">📜 No script selected</span>
-                    <span class="badge success" id="panelPreviewAccessBadge">🔑 Key Required</span>
+                  <div class="meta-list">
+                    <div class="meta-item"><strong>Project</strong><span id="panelPreviewScriptBadge">No script selected</span></div>
+                    <div class="meta-item"><strong>Access</strong><span id="panelPreviewAccessBadge">Key Required</span></div>
+                    <div class="meta-item"><strong>Role</strong><span id="panelPreviewRole">Not set</span></div>
+                    <div class="meta-item"><strong>HWID Cooldown</strong><span id="panelPreviewHwid">180 seconds</span></div>
                   </div>
-                </div>
-                <div class="meta-list">
-                  <div class="meta-item"><strong>Brand</strong><span>LuaObfuscationHub | v5</span></div>
-                  <div class="meta-item"><strong>Buyer role</strong><span id="panelPreviewRole">Not set</span></div>
-                  <div class="meta-item"><strong>Free key</strong><span id="panelPreviewFreeKey">24 hours</span></div>
-                  <div class="meta-item"><strong>HWID cooldown</strong><span id="panelPreviewHwid">180 seconds</span></div>
-                </div>
-                <div class="section-stack">
-                  <div class="action-row">
-                    <span class="button primary small">📜 View Script</span>
-                    <span class="button primary small" style="background: linear-gradient(135deg, #35d17c, #25985a); color: #fff;">🔑 Redeem Key</span>
-                  </div>
-                  <div class="action-row">
-                    <span class="button secondary small">📊 Key Info</span>
-                  </div>
-                  <div class="action-row">
-                    <span class="button secondary small">👤 Get Buyer Role</span>
-                    <span class="button secondary small">🔗 Free Key</span>
-                  </div>
-                  <div class="action-row">
-                    <span class="button danger small">⚙️ Reset HWID</span>
+                  <div class="section-stack">
+                    <div class="action-row">
+                      <span class="button primary small" style="background: linear-gradient(135deg, #35d17c, #25985a); color: #fff;">🔑 Redeem Key</span>
+                      <span class="button primary small">📜 Get Script</span>
+                    </div>
+                    <div class="action-row">
+                      <span class="button primary small">👤 Get Role</span>
+                      <span class="button secondary small">⚙️ Reset HWID</span>
+                    </div>
+                    <div class="action-row">
+                      <span class="button secondary small">📊 Get Stats</span>
+                    </div>
                   </div>
                 </div>
-              </div>
             </div>
 
             <div class="form-actions">
@@ -4253,37 +3674,6 @@ app.get('/dashboard', requireAuth, (req, res) => {
           </div>
 
           <div id="keysList" class="resource-grid"></div>
-        </section>
-
-        <section id="view-whitelist" class="view stack-xl">
-          <div class="panel section-card">
-            <div class="section-header">
-              <div>
-                <p class="mini-label">Trusted access</p>
-                <h2>Whitelist manager</h2>
-                <p class="muted">Give trusted Discord users permanent access to a protected script without handing out a reusable key.</p>
-              </div>
-              <span class="count-badge" id="whitelistCount">0 grants</span>
-            </div>
-            <div class="form-grid three">
-              <div class="field">
-                <label for="whitelistScriptId">Protected script</label>
-                <select id="whitelistScriptId"><option value="">Select protected script</option></select>
-              </div>
-              <div class="field">
-                <label for="whitelistDiscordUserId">Discord user ID</label>
-                <input id="whitelistDiscordUserId" type="text" inputmode="numeric" placeholder="123456789012345678" />
-              </div>
-              <div class="field">
-                <label for="whitelistDiscordTag">Discord tag</label>
-                <input id="whitelistDiscordTag" type="text" placeholder="trusted-user" />
-              </div>
-            </div>
-            <div class="form-actions">
-              <button class="button primary" id="addWhitelistButton" type="button">Grant trusted access</button>
-            </div>
-          </div>
-          <div id="whitelistList" class="resource-grid"></div>
         </section>
 
         <section id="view-hwids" class="view stack-xl">
@@ -4445,31 +3835,66 @@ async function registerCommands() {
 
   const commands = [
     new SlashCommandBuilder()
-      .setName('setup')
-      .setDescription('Set up the LuaObfuscationHub access panel in this channel')
-      .addStringOption((option) => option.setName('script').setDescription('Script ID, public ID, or exact script name').setRequired(true)),
+      .setName('login')
+      .setDescription('Validate an API key for this Discord account')
+      .addStringOption((option) => option.setName('api_key').setDescription('Your API key').setRequired(true)),
+    new SlashCommandBuilder().setName('limits').setDescription('Check your script and panel limits'),
+    new SlashCommandBuilder()
+      .setName('panel')
+      .setDescription('Send a panel to the current Discord channel')
+      .addStringOption((option) => option.setName('panel_id').setDescription('Panel ID').setRequired(true)),
     new SlashCommandBuilder()
       .setName('generatekey')
-      .setDescription('Generate a license key for a script')
-      .addStringOption((option) => option.setName('script').setDescription('Script ID, public ID, or exact script name').setRequired(true))
-      .addIntegerOption((option) => option.setName('duration').setDescription('Duration in hours; 0 is permanent').setMinValue(0).setRequired(false))
-      .addUserOption((option) => option.setName('user').setDescription('Assign the key to a Discord user').setRequired(false))
-      .addStringOption((option) => option.setName('note').setDescription('Optional internal note').setRequired(false)),
+      .setDescription('Generate a license key')
+      .addStringOption((option) => option.setName('panel_id').setDescription('Panel ID').setRequired(true))
+      .addIntegerOption((option) => option.setName('hours').setDescription('Duration in hours (0 = permanent)').setRequired(true))
+      .addStringOption((option) => option.setName('note').setDescription('Optional note'))
+      .addUserOption((option) => option.setName('user').setDescription('Assign the key to a Discord user').setRequired(false)),
+    new SlashCommandBuilder()
+      .setName('setbuyerrole')
+      .setDescription('Set the buyer role for a panel')
+      .addStringOption((option) => option.setName('panel_id').setDescription('Panel ID').setRequired(true))
+      .addRoleOption((option) => option.setName('role').setDescription('Role to assign').setRequired(true)),
     new SlashCommandBuilder()
       .setName('whitelist')
       .setDescription('Whitelist a Discord user to a script')
-      .addStringOption((option) => option.setName('script').setDescription('Script ID, public ID, or exact script name').setRequired(true))
-      .addUserOption((option) => option.setName('user').setDescription('User to whitelist').setRequired(true))
-      .addIntegerOption((option) => option.setName('duration').setDescription('Duration in hours; leave blank for permanent').setMinValue(1).setRequired(false)),
+      .addStringOption((option) => option.setName('script_id').setDescription('Script ID').setRequired(true))
+      .addUserOption((option) => option.setName('user').setDescription('User to whitelist').setRequired(true)),
     new SlashCommandBuilder()
-      .setName('blacklist')
-      .setDescription('Blacklist a Discord user from a script')
-      .addStringOption((option) => option.setName('script').setDescription('Script ID, public ID, or exact script name').setRequired(true))
-      .addUserOption((option) => option.setName('user').setDescription('User to blacklist').setRequired(true)),
+      .setName('resethwid')
+      .setDescription('Reset your linked HWID for a script')
+      .addStringOption((option) => option.setName('script_id').setDescription('Script ID').setRequired(true)),
     new SlashCommandBuilder()
-      .setName('deletekey')
-      .setDescription('Delete a license key')
-      .addStringOption((option) => option.setName('key').setDescription('License key to delete').setRequired(true)),
+      .setName('forceresethwid')
+      .setDescription('Force reset HWID for a whitelisted or claimed user')
+      .addStringOption((option) => option.setName('script_id').setDescription('Script ID').setRequired(true))
+      .addUserOption((option) => option.setName('user').setDescription('Discord user').setRequired(true)),
+    new SlashCommandBuilder()
+      .setName('banuser')
+      .setDescription('Blacklist a Discord ID from logging into the website')
+      .addStringOption((option) => option.setName('discord_id').setDescription('Discord ID to ban').setRequired(true))
+      .addStringOption((option) => option.setName('reason').setDescription('Optional reason').setRequired(false)),
+    new SlashCommandBuilder()
+      .setName('unbanuser')
+      .setDescription('Remove a Discord ID from the website blacklist')
+      .addStringOption((option) => option.setName('discord_id').setDescription('Discord ID to unban').setRequired(true)),
+    new SlashCommandBuilder()
+      .setName('banhwid')
+      .setDescription('Ban a hardware ID from script use')
+      .addStringOption((option) => option.setName('hwid').setDescription('HWID to ban').setRequired(true))
+      .addStringOption((option) => option.setName('reason').setDescription('Optional reason').setRequired(false)),
+    new SlashCommandBuilder()
+      .setName('unbanhwid')
+      .setDescription('Remove a hardware ID ban')
+      .addStringOption((option) => option.setName('hwid').setDescription('HWID to unban').setRequired(true)),
+    new SlashCommandBuilder()
+      .setName('loader')
+      .setDescription('Get the loader for a script')
+      .addStringOption((option) => option.setName('script_id').setDescription('Script ID').setRequired(true)),
+    new SlashCommandBuilder()
+      .setName('keys')
+      .setDescription('List your recent license keys')
+      .addStringOption((option) => option.setName('panel_id').setDescription('Filter by panel ID').setRequired(false)),
   ];
 
   const rest = new REST({ version: '10' }).setToken(DISCORD_TOKEN);
@@ -4506,9 +3931,6 @@ client.on('interactionCreate', async (interaction) => {
         const keyRecord = db.prepare('SELECT * FROM license_keys WHERE key = ? AND script_id = ?').get(input, panel.script_id);
 
         if (!keyRecord) return interaction.reply({ content: 'Invalid license key.', ephemeral: true });
-        if (isScriptBlacklisted(panel.script_id, interaction.user.id)) {
-          return interaction.reply({ content: 'You are blacklisted from this script.', ephemeral: true });
-        }
         if (isExpired(keyRecord.expires_at)) return interaction.reply({ content: 'This key has expired.', ephemeral: true });
         if (keyRecord.claimed_by && keyRecord.claimed_by !== interaction.user.id) {
           return interaction.reply({ content: 'This key has already been claimed by another user.', ephemeral: true });
@@ -4527,9 +3949,6 @@ client.on('interactionCreate', async (interaction) => {
         const keyRecord = db.prepare('SELECT * FROM license_keys WHERE key = ? AND script_id = ?').get(input, scriptId);
 
         if (!keyRecord) return interaction.reply({ content: 'Invalid license key.', ephemeral: true });
-        if (isScriptBlacklisted(scriptId, interaction.user.id)) {
-          return interaction.reply({ content: 'You are blacklisted from this script.', ephemeral: true });
-        }
         if (isExpired(keyRecord.expires_at)) return interaction.reply({ content: 'This key has expired.', ephemeral: true });
         if (keyRecord.claimed_by && keyRecord.claimed_by !== interaction.user.id) {
           return interaction.reply({ content: 'This key has already been claimed by another user.', ephemeral: true });
@@ -4553,19 +3972,27 @@ client.on('interactionCreate', async (interaction) => {
         const script = getScriptById(panel.script_id);
         if (!script) return interaction.reply({ content: 'Script not found.', ephemeral: true });
 
+        const hasPanelAccess = canDiscordUserAccessScript(script.id, interaction.user.id);
+        const currentKey = getLatestActiveClaimedKey(script.id, interaction.user.id);
+        const whitelistRow = db.prepare(
+          'SELECT * FROM script_whitelist WHERE script_id = ? AND discord_user_id = ?'
+        ).get(script.id, interaction.user.id);
+
         if (action === 'view') {
+          if (!hasPanelAccess) {
+            return interaction.reply({ content: PANEL_WHITELIST_REQUIRED_MESSAGE, ephemeral: true });
+          }
           const embed = buildPanelEmbed(panel, script)
-            .addFields(
-              { name: 'Access', value: script.ffa_mode ? 'Open access' : 'Key required', inline: true },
-              { name: 'HWID Cooldown', value: `${panel.hwid_cooldown || 0}s`, inline: true },
-              { name: 'Loader Ready', value: 'Use the button below to grab the hosted mobile loadstring.', inline: false }
-            );
+            .addFields({ name: 'Loader Ready', value: 'Use the button below to copy the hosted mobile loadstring.', inline: false });
           return interaction.reply({ embeds: [embed], components: [buildMobileViewButton(`panelmobile_${panel.id}`)], ephemeral: true });
         }
 
-        if (action === 'mobile') {
+        if (action === 'mobile' || action === 'script') {
+          if (!hasPanelAccess) {
+            return interaction.reply({ content: PANEL_WHITELIST_REQUIRED_MESSAGE, ephemeral: true });
+          }
           return interaction.reply({
-            content: `Mobile View\n\`\`\`lua\n${buildLoaderSnippet(script)}\n\`\`\``,
+            content: `Mobile View\n\`\`\`lua\n${buildLoaderSnippet(script)}\n\`\`\`` ,
             ephemeral: true,
           });
         }
@@ -4585,22 +4012,36 @@ client.on('interactionCreate', async (interaction) => {
           return interaction.showModal(modal);
         }
 
-        if (action === 'keyinfo') {
-          const message = script.ffa_mode
-            ? `This script is using open access.\n\n${buildLoaderSnippet(script)}`
-            : `This script uses the key system. Set your key first, then run the hosted loader.\n\n${buildLoaderSnippet(script)}`;
-          return interaction.reply({ content: message, ephemeral: true });
+        if (action === 'keyinfo' || action === 'stats') {
+          if (!hasPanelAccess) {
+            return interaction.reply({ content: PANEL_WHITELIST_REQUIRED_MESSAGE, ephemeral: true });
+          }
+
+          const statsEmbed = new EmbedBuilder()
+            .setColor(BRAND_COLOR)
+            .setTitle(`${panel.name} Stats`)
+            .addFields(
+              { name: 'Script', value: script.name, inline: true },
+              { name: 'Access', value: script.ffa_mode ? 'Open access' : 'Key required', inline: true },
+              { name: 'Whitelist', value: whitelistRow ? 'Yes' : 'No', inline: true },
+              { name: 'Key', value: currentKey?.key || 'No claimed key linked', inline: false },
+              { name: 'HWID', value: currentKey?.hwid || 'Not locked yet', inline: true },
+              { name: 'Expires', value: formatDate(currentKey?.expires_at || null), inline: true }
+            )
+            .setFooter({ text: 'LuaObfuscationHub | stats' });
+
+          return interaction.reply({ embeds: [statsEmbed], ephemeral: true });
         }
 
-        if (action === 'buyerrole') {
+        if (action === 'buyerrole' || action === 'role') {
+          if (!hasPanelAccess) {
+            return interaction.reply({ content: PANEL_WHITELIST_REQUIRED_MESSAGE, ephemeral: true });
+          }
           if (!interaction.inGuild()) {
             return interaction.reply({ content: 'This button only works inside a server.', ephemeral: true });
           }
           if (!panel.buyer_role_id) {
             return interaction.reply({ content: 'No buyer role has been configured for this panel.', ephemeral: true });
-          }
-          if (!canDiscordUserAccessScript(script.id, interaction.user.id)) {
-            return interaction.reply({ content: 'You need a valid key or whitelist entry before claiming the buyer role.', ephemeral: true });
           }
 
           const member = await interaction.guild.members.fetch(interaction.user.id);
@@ -4609,40 +4050,22 @@ client.on('interactionCreate', async (interaction) => {
         }
 
         if (action === 'freekey') {
-          if (Number(panel.free_key_hours || 0) <= 0) {
-            return interaction.reply({ content: 'Free keys are disabled for this panel.', ephemeral: true });
+          if (!hasPanelAccess) {
+            return interaction.reply({ content: PANEL_WHITELIST_REQUIRED_MESSAGE, ephemeral: true });
           }
-
-          const existing = getLatestActiveClaimedKey(script.id, interaction.user.id);
-          if (existing) {
-            return interaction.reply({ content: `You already have an active key: ${existing.key}\n\n${buildLoaderSnippet(script)}`, ephemeral: true });
-          }
-
-          const expiresAt = new Date(Date.now() + Number(panel.free_key_hours) * 3600000).toISOString();
-          const row = createLicenseKeyRecord({
-            scriptId: script.id,
-            panelId: panel.id,
-            userId: panel.user_id,
-            note: `Free key issued to ${interaction.user.tag}`,
-            expiresAt,
-            claimedBy: interaction.user.id,
-            claimedTag: interaction.user.tag,
-          });
-
-          return interaction.reply({
-            content: `Free key generated: ${row.key}\nExpires: ${new Date(expiresAt).toLocaleString()}\n\n${buildLoaderSnippet(script)}`,
-            ephemeral: true,
-          });
+          return interaction.reply({ content: 'This panel no longer issues free keys. Ask the owner for a whitelist or key grant.', ephemeral: true });
         }
 
         if (action === 'resethwid') {
-          const key = getLatestActiveClaimedKey(script.id, interaction.user.id);
-          if (!key) {
+          if (!hasPanelAccess) {
+            return interaction.reply({ content: PANEL_WHITELIST_REQUIRED_MESSAGE, ephemeral: true });
+          }
+          if (!currentKey) {
             return interaction.reply({ content: 'No active claimed key was found for your account.', ephemeral: true });
           }
 
-          if (key.last_hwid_reset_at) {
-            const nextAllowed = new Date(key.last_hwid_reset_at).getTime() + Number(panel.hwid_cooldown || 0) * 1000;
+          if (currentKey.last_hwid_reset_at) {
+            const nextAllowed = new Date(currentKey.last_hwid_reset_at).getTime() + Number(panel.hwid_cooldown || 0) * 1000;
             if (nextAllowed > Date.now()) {
               const remaining = Math.ceil((nextAllowed - Date.now()) / 1000);
               return interaction.reply({ content: `Please wait ${remaining}s before resetting HWID again.`, ephemeral: true });
@@ -4651,7 +4074,7 @@ client.on('interactionCreate', async (interaction) => {
 
           db.prepare(
             'UPDATE license_keys SET hwid = NULL, last_hwid_reset_at = CURRENT_TIMESTAMP WHERE key = ?'
-          ).run(key.key);
+          ).run(currentKey.key);
           return interaction.reply({ content: 'HWID has been reset for your active key.', ephemeral: true });
         }
       }
@@ -4744,145 +4167,262 @@ client.on('interactionCreate', async (interaction) => {
     if (interaction.isChatInputCommand()) {
       const command = interaction.commandName;
 
-      if (command === 'setup') {
-        const scriptRef = interaction.options.getString('script', true);
-        const { owner, script } = getOwnedScriptForDiscord(scriptRef, interaction.user.id);
-        if (!owner) return interaction.reply({ content: 'No linked dashboard account was found for this Discord user.', ephemeral: true });
-        if (!script) return interaction.reply({ content: 'Script not found. Use its ID, public ID, or exact name.', ephemeral: true });
+      if (command === 'login') {
+        const apiKey = interaction.options.getString('api_key', true);
+        const keyRecord = db.prepare('SELECT * FROM api_keys WHERE key = ? AND is_active = 1').get(apiKey);
+        if (!keyRecord) return interaction.reply({ content: 'Invalid API key.', ephemeral: true });
+        if (isExpired(keyRecord.expires_at)) return interaction.reply({ content: 'API key expired.', ephemeral: true });
+
+        const user = db.prepare('SELECT * FROM users WHERE id = ?').get(keyRecord.owner_id);
+        if (!user) return interaction.reply({ content: 'User not found.', ephemeral: true });
+
+        db.prepare('UPDATE api_keys SET last_used_at = CURRENT_TIMESTAMP WHERE key = ?').run(apiKey);
+        const limits = getRemainingLimits(user.id);
+
+        const embed = new EmbedBuilder()
+          .setColor(BRAND_COLOR)
+          .setTitle('API key validated')
+          .setDescription(`Account: ${user.username}`)
+          .addFields(
+            { name: 'Scripts', value: `${limits.currentScripts}/${limits.maxScripts}`, inline: true },
+            { name: 'Panels', value: `${limits.currentPanels}/${limits.maxPanels}`, inline: true }
+          )
+          .setFooter({ text: 'LuaObfuscationHub' });
+
+        return interaction.reply({ embeds: [embed], ephemeral: true });
+      }
+
+      if (command === 'limits') {
+        const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(interaction.user.id);
+        if (!user) return interaction.reply({ content: 'No linked dashboard account was found for this Discord user.', ephemeral: true });
+
+        const limits = getRemainingLimits(user.id);
+        const embed = new EmbedBuilder()
+          .setColor(BRAND_COLOR)
+          .setTitle('Current limits')
+          .addFields(
+            { name: 'Scripts', value: `${limits.currentScripts}/${limits.maxScripts}`, inline: true },
+            { name: 'Panels', value: `${limits.currentPanels}/${limits.maxPanels}`, inline: true },
+            { name: 'Remaining scripts', value: `${limits.remainingScripts}`, inline: true },
+            { name: 'Remaining panels', value: `${limits.remainingPanels}`, inline: true }
+          )
+          .setFooter({ text: 'LuaObfuscationHub' });
+
+        return interaction.reply({ embeds: [embed], ephemeral: true });
+      }
+
+      if (command === 'panel') {
+        const panelId = interaction.options.getString('panel_id', true);
+        const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(interaction.user.id);
+        if (!user) return interaction.reply({ content: 'No linked dashboard account was found for this Discord user.', ephemeral: true });
+
+        const panel = db.prepare('SELECT * FROM panels WHERE id = ? AND user_id = ?').get(panelId, user.id);
+        if (!panel) return interaction.reply({ content: 'Panel not found.', ephemeral: true });
+        const script = getScriptById(panel.script_id);
+        if (!script) return interaction.reply({ content: 'Script not found.', ephemeral: true });
         if (!interaction.channel || !interaction.channel.isTextBased()) {
-          return interaction.reply({ content: 'Use /setup in a text channel.', ephemeral: true });
+          return interaction.reply({ content: 'This command must be used in a text channel.', ephemeral: true });
         }
 
-        let panel = db.prepare(
-          'SELECT * FROM panels WHERE user_id = ? AND script_id = ? AND channel_id = ? ORDER BY created_at ASC LIMIT 1'
-        ).get(owner.id, script.id, interaction.channel.id);
-
-        if (!panel) {
-          if (!canCreatePanel(owner.id)) return interaction.reply({ content: 'Your panel limit has been reached.', ephemeral: true });
-          const panelId = makeId('panel');
-          db.prepare(
-            `INSERT INTO panels (id, user_id, name, description, channel_id, script_id, free_key_hours, hwid_cooldown)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-          ).run(
-            panelId,
-            owner.id,
-            `${script.name} Access`,
-            'Manage script access, keys, and HWID controls from this panel.',
-            interaction.channel.id,
-            script.id,
-            24,
-            180
-          );
-          panel = getPanelById(panelId);
-        }
-
-        await interaction.channel.send({
-          embeds: [buildPanelEmbed(panel, script)],
-          components: buildPanelComponents(panel),
-        });
-        return interaction.reply({ content: `LuaObfuscationHub panel set up for **${script.name}** in this channel.`, ephemeral: true });
-      }
-
-      if (command === 'whitelist') {
-        const scriptRef = interaction.options.getString('script', true);
-        const targetUser = interaction.options.getUser('user', true);
-        const duration = interaction.options.getInteger('duration');
-        const { owner, script } = getOwnedScriptForDiscord(scriptRef, interaction.user.id);
-        if (!owner) return interaction.reply({ content: 'No linked dashboard account was found for this Discord user.', ephemeral: true });
-        if (!script) return interaction.reply({ content: 'Script not found. Use its ID, public ID, or exact name.', ephemeral: true });
-        if (isScriptBlacklisted(script.id, targetUser.id)) {
-          return interaction.reply({ content: `${targetUser.tag} is blacklisted from this script. Remove the blacklist first.`, ephemeral: true });
-        }
-
-        const expiresAt = duration ? new Date(Date.now() + duration * 3600000).toISOString() : null;
-        const row = ensureWhitelistAccess({
-          ownerUserId: owner.id,
-          scriptId: script.id,
-          discordUserId: targetUser.id,
-          discordTag: targetUser.tag,
-          expiresAt,
-        });
-
-        return interaction.reply({
-          content: `Whitelisted **${targetUser.tag}** for **${script.name}**.\nAuto-generated key: \`${row.key}\`\n${expiresAt ? `Expires: ${new Date(expiresAt).toLocaleString()}` : 'Permanent access'}`,
-          ephemeral: true,
-        });
-      }
-
-      if (command === 'blacklist') {
-        const scriptRef = interaction.options.getString('script', true);
-        const targetUser = interaction.options.getUser('user', true);
-        const { owner, script } = getOwnedScriptForDiscord(scriptRef, interaction.user.id);
-        if (!owner) return interaction.reply({ content: 'No linked dashboard account was found for this Discord user.', ephemeral: true });
-        if (!script) return interaction.reply({ content: 'Script not found. Use its ID, public ID, or exact name.', ephemeral: true });
-
-        const existing = db.prepare(
-          'SELECT id FROM script_blacklist WHERE script_id = ? AND discord_user_id = ?'
-        ).get(script.id, targetUser.id);
-        if (!existing) {
-          db.prepare(
-            `INSERT INTO script_blacklist (id, script_id, owner_user_id, discord_user_id, discord_tag, reason)
-             VALUES (?, ?, ?, ?, ?, ?)`
-          ).run(makeId('bl'), script.id, owner.id, targetUser.id, targetUser.tag, 'Blacklisted by script owner');
-        }
-
-        const removeAccess = db.transaction(() => {
-          const whitelist = db.prepare(
-            'SELECT granted_key FROM script_whitelist WHERE script_id = ? AND discord_user_id = ?'
-          ).get(script.id, targetUser.id);
-          if (whitelist?.granted_key) {
-            db.prepare('DELETE FROM license_keys WHERE key = ? AND user_id = ?').run(whitelist.granted_key, owner.id);
-          }
-          db.prepare('DELETE FROM script_whitelist WHERE script_id = ? AND discord_user_id = ?').run(script.id, targetUser.id);
-          db.prepare('DELETE FROM license_keys WHERE script_id = ? AND user_id = ? AND claimed_by = ?').run(script.id, owner.id, targetUser.id);
-        });
-        removeAccess();
-
-        return interaction.reply({ content: `Blacklisted **${targetUser.tag}** from **${script.name}** and removed their access.`, ephemeral: true });
+        await interaction.channel.send({ embeds: [buildPanelEmbed(panel, script)], components: buildPanelComponents(panel) });
+        return interaction.reply({ content: 'Panel sent to this channel.', ephemeral: true });
       }
 
       if (command === 'generatekey') {
-        const scriptRef = interaction.options.getString('script', true);
-        const duration = interaction.options.getInteger('duration') || 0;
+        const panelId = interaction.options.getString('panel_id', true);
+        const hours = interaction.options.getInteger('hours', true);
         const note = interaction.options.getString('note') || '';
         const targetUser = interaction.options.getUser('user');
-        const { owner, script } = getOwnedScriptForDiscord(scriptRef, interaction.user.id);
-        if (!owner) return interaction.reply({ content: 'No linked dashboard account was found for this Discord user.', ephemeral: true });
-        if (!script) return interaction.reply({ content: 'Script not found. Use its ID, public ID, or exact name.', ephemeral: true });
-        if (targetUser && isScriptBlacklisted(script.id, targetUser.id)) {
-          return interaction.reply({ content: `${targetUser.tag} is blacklisted from this script.`, ephemeral: true });
-        }
 
-        const expiresAt = duration > 0 ? new Date(Date.now() + duration * 3600000).toISOString() : null;
+        const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(interaction.user.id);
+        if (!user) return interaction.reply({ content: 'No linked dashboard account was found for this Discord user.', ephemeral: true });
+
+        const panel = db.prepare('SELECT * FROM panels WHERE id = ? AND user_id = ?').get(panelId, user.id);
+        if (!panel) return interaction.reply({ content: 'Panel not found.', ephemeral: true });
+
+        const expiresAt = hours > 0 ? new Date(Date.now() + hours * 3600000).toISOString() : null;
         const row = createLicenseKeyRecord({
-          scriptId: script.id,
-          userId: owner.id,
+          scriptId: panel.script_id,
+          panelId: panel.id,
+          userId: user.id,
           note,
           expiresAt,
           claimedBy: targetUser?.id || null,
-          claimedTag: targetUser?.tag || null,
+          claimedTag: targetUser ? targetUser.tag : null,
         });
+
         return interaction.reply({
-          content: `Generated key for **${script.name}**: \`${row.key}\`\n${targetUser ? `Assigned to: ${targetUser.tag}\n` : ''}${expiresAt ? `Expires: ${new Date(expiresAt).toLocaleString()}` : 'Permanent key'}`,
+          content: `Generated key: ${row.key}\n${targetUser ? `Assigned to: ${targetUser.tag}\n` : ''}${expiresAt ? `Expires: ${new Date(expiresAt).toLocaleString()}` : 'Permanent key'}`,
           ephemeral: true,
         });
       }
 
-      if (command === 'deletekey') {
-        const key = interaction.options.getString('key', true).trim().toUpperCase();
-        const owner = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(interaction.user.id);
-        if (!owner) return interaction.reply({ content: 'No linked dashboard account was found for this Discord user.', ephemeral: true });
-        const keyRecord = db.prepare('SELECT * FROM license_keys WHERE key = ? AND user_id = ?').get(key, owner.id);
-        if (!keyRecord) return interaction.reply({ content: 'Key not found in your workspace.', ephemeral: true });
-        db.prepare('DELETE FROM license_keys WHERE key = ? AND user_id = ?').run(key, owner.id);
-        db.prepare('UPDATE script_whitelist SET granted_key = NULL WHERE granted_key = ? AND owner_user_id = ?').run(key, owner.id);
-        return interaction.reply({ content: `Deleted key \`${key}\`.`, ephemeral: true });
+      if (command === 'setbuyerrole') {
+        const panelId = interaction.options.getString('panel_id', true);
+        const role = interaction.options.getRole('role', true);
+        const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(interaction.user.id);
+        if (!user) return interaction.reply({ content: 'No linked dashboard account was found for this Discord user.', ephemeral: true });
+
+        const panel = getPanelById(panelId);
+        if (!panel || panel.user_id !== user.id) return interaction.reply({ content: 'Panel not found.', ephemeral: true });
+        db.prepare('UPDATE panels SET buyer_role_id = ? WHERE id = ?').run(role.id, panelId);
+        return interaction.reply({ content: `Buyer role set to ${role.name} for panel ${panel.name}.`, ephemeral: true });
       }
 
-      return interaction.reply({
-        content: 'This bot only supports /setup, /whitelist, /blacklist, /generatekey, and /deletekey.',
-        ephemeral: true,
-      });
+      if (command === 'whitelist') {
+        const scriptId = interaction.options.getString('script_id', true);
+        const targetUser = interaction.options.getUser('user', true);
+        const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(interaction.user.id);
+        if (!user) return interaction.reply({ content: 'No linked dashboard account was found for this Discord user.', ephemeral: true });
+
+        const script = getScriptById(scriptId);
+        if (!script || script.user_id !== user.id) return interaction.reply({ content: 'Script not found.', ephemeral: true });
+
+        const row = ensureWhitelistAccess({
+          ownerUserId: user.id,
+          scriptId,
+          discordUserId: targetUser.id,
+          discordTag: targetUser.tag,
+        });
+
+        return interaction.reply({
+          content: `Whitelisted ${targetUser.tag} to ${script.name}.\nAssigned key: ${row.key}`,
+          ephemeral: true,
+        });
+      }
+
+      if (command === 'resethwid') {
+        const scriptId = interaction.options.getString('script_id', true);
+        const script = getScriptById(scriptId);
+        if (!script) return interaction.reply({ content: 'Script not found.', ephemeral: true });
+
+        const key = getLatestActiveClaimedKey(scriptId, interaction.user.id);
+        if (!key) {
+          return interaction.reply({ content: 'No active claimed key was found for your account on this script.', ephemeral: true });
+        }
+
+        const panel = db.prepare('SELECT * FROM panels WHERE script_id = ? ORDER BY created_at ASC LIMIT 1').get(scriptId);
+        if (panel?.hwid_cooldown && key.last_hwid_reset_at) {
+          const nextAllowed = new Date(key.last_hwid_reset_at).getTime() + Number(panel.hwid_cooldown) * 1000;
+          if (nextAllowed > Date.now()) {
+            const remaining = Math.ceil((nextAllowed - Date.now()) / 1000);
+            return interaction.reply({ content: `Please wait ${remaining}s before resetting HWID again.`, ephemeral: true });
+          }
+        }
+
+        db.prepare('UPDATE license_keys SET hwid = NULL, last_hwid_reset_at = CURRENT_TIMESTAMP WHERE key = ?').run(key.key);
+        return interaction.reply({ content: `HWID reset complete for ${script.name}. Re-run your loader to link the new HWID.`, ephemeral: true });
+      }
+
+      if (command === 'forceresethwid') {
+        const scriptId = interaction.options.getString('script_id', true);
+        const targetUser = interaction.options.getUser('user', true);
+        const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(interaction.user.id);
+        if (!user) return interaction.reply({ content: 'No linked dashboard account was found for this Discord user.', ephemeral: true });
+
+        const script = getScriptById(scriptId);
+        if (!script || script.user_id !== user.id) return interaction.reply({ content: 'Script not found.', ephemeral: true });
+
+        const key = getLatestActiveClaimedKey(scriptId, targetUser.id);
+        if (!key) {
+          return interaction.reply({ content: 'That user does not have an active claimed key for this script.', ephemeral: true });
+        }
+
+        db.prepare('UPDATE license_keys SET hwid = NULL, last_hwid_reset_at = CURRENT_TIMESTAMP WHERE key = ?').run(key.key);
+        return interaction.reply({ content: `Forced HWID reset for ${targetUser.tag} on ${script.name}.`, ephemeral: true });
+      }
+
+      if (command === 'banuser') {
+        if (interaction.user.id !== OWNER_ID) {
+          return interaction.reply({ content: 'Only the owner can blacklist website users.', ephemeral: true });
+        }
+        const discordId = interaction.options.getString('discord_id', true);
+        const reason = interaction.options.getString('reason') || 'Blacklisted from website access';
+        const linkedUser = db.prepare('SELECT * FROM users WHERE discord_id = ? OR id = ?').get(discordId, discordId);
+        const existing = getAccessBan(discordId, linkedUser?.id || null);
+        const actingUser = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(interaction.user.id);
+        if (!existing) {
+          db.prepare(
+            `INSERT INTO access_bans (id, discord_id, user_id, reason, banned_by)
+             VALUES (?, ?, ?, ?, ?)`
+          ).run(makeId('ban'), linkedUser?.discord_id || discordId, linkedUser?.id || null, reason, actingUser?.id || null);
+        }
+        return interaction.reply({ content: `Website access blacklisted for ${discordId}.`, ephemeral: true });
+      }
+
+      if (command === 'unbanuser') {
+        if (interaction.user.id !== OWNER_ID) {
+          return interaction.reply({ content: 'Only the owner can unban website users.', ephemeral: true });
+        }
+        const discordId = interaction.options.getString('discord_id', true);
+        db.prepare('DELETE FROM access_bans WHERE discord_id = ?').run(discordId);
+        const linkedUser = db.prepare('SELECT * FROM users WHERE discord_id = ? OR id = ?').get(discordId, discordId);
+        if (linkedUser) db.prepare('DELETE FROM access_bans WHERE user_id = ?').run(linkedUser.id);
+        return interaction.reply({ content: `Website access restored for ${discordId}.`, ephemeral: true });
+      }
+
+      if (command === 'banhwid') {
+        const hwid = interaction.options.getString('hwid', true).trim();
+        const reason = interaction.options.getString('reason') || '';
+        const websiteUser = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(interaction.user.id);
+        const bannedBy = websiteUser?.id || null;
+        db.prepare('INSERT OR REPLACE INTO banned_hwids (hwid, reason, banned_by) VALUES (?, ?, ?)').run(hwid, reason, bannedBy);
+        return interaction.reply({ content: `HWID ${hwid} has been banned.`, ephemeral: true });
+      }
+
+      if (command === 'unbanhwid') {
+        const hwid = interaction.options.getString('hwid', true).trim();
+        db.prepare('DELETE FROM banned_hwids WHERE hwid = ?').run(hwid);
+        return interaction.reply({ content: `HWID ${hwid} has been unbanned.`, ephemeral: true });
+      }
+
+      if (command === 'loader') {
+        const scriptId = interaction.options.getString('script_id', true);
+        const script = getScriptById(scriptId);
+        if (!script) return interaction.reply({ content: 'Script not found.', ephemeral: true });
+        return interaction.reply({ content: `\`\`\`lua\n${buildLoaderSnippet(script)}\n\`\`\``, ephemeral: true });
+      }
+
+      if (command === 'keys') {
+        const panelId = interaction.options.getString('panel_id');
+        const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(interaction.user.id);
+        if (!user) return interaction.reply({ content: 'No linked dashboard account was found for this Discord user.', ephemeral: true });
+
+        let rows;
+        if (panelId) {
+          const panel = db.prepare('SELECT * FROM panels WHERE id = ? AND user_id = ?').get(panelId, user.id);
+          if (!panel) return interaction.reply({ content: 'Panel not found.', ephemeral: true });
+          rows = db.prepare(
+            `SELECT key, note, expires_at, claimed_tag, created_at
+             FROM license_keys
+             WHERE user_id = ? AND panel_id = ?
+             ORDER BY created_at DESC
+             LIMIT 10`
+          ).all(user.id, panelId);
+        } else {
+          rows = db.prepare(
+            `SELECT key, note, expires_at, claimed_tag, created_at
+             FROM license_keys
+             WHERE user_id = ?
+             ORDER BY created_at DESC
+             LIMIT 10`
+          ).all(user.id);
+        }
+
+        if (!rows.length) return interaction.reply({ content: 'No license keys were found.', ephemeral: true });
+
+        const lines = rows.map((row) => {
+          const status = isExpired(row.expires_at)
+            ? 'Expired'
+            : row.claimed_tag
+              ? `Claimed by ${row.claimed_tag}`
+              : 'Available';
+          const note = row.note ? ` | ${row.note}` : '';
+          return `${row.key} | ${status}${note}`;
+        });
+
+        return interaction.reply({ content: `\`\`\`\n${lines.join('\n')}\n\`\`\``, ephemeral: true });
+      }
     }
   } catch (error) {
     console.error('Interaction error:', error);
